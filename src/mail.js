@@ -21,12 +21,15 @@ async function fetchFromMail(cfg, env){
       const since = new Date(Date.now() - m.searchDays * 86400000);
       const uids = await client.search({ since: since, subject: m.subject }, { uid: true });
       const cands = [];
-      if(uids && uids.length){
-        for await (const msg of client.fetch(uids.join(','), { envelope: true, internalDate: true }, { uid: true })){
-          const subj = String((msg.envelope && msg.envelope.subject) || '').trim();
-          if(subj === String(m.subject)) cands.push({ uid: msg.uid, date: new Date(msg.internalDate), subject: subj });
-        }
-      }
+    if(uids && uids.length){
+  const want = String(m.subject).trim();
+  // «123» / «123 от 08.10.2026» — подходит; «1234 …» и «8123 …» — нет
+  const re = new RegExp('^' + want.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?!\\d)');
+  for await (const msg of client.fetch(uids.join(','), { envelope: true, internalDate: true }, { uid: true })){
+    const subj = String((msg.envelope && msg.envelope.subject) || '').trim();
+    if(re.test(subj)) cands.push({ uid: msg.uid, date: new Date(msg.internalDate), subject: subj });
+  }
+}
       if(!cands.length) throw new Error('Не найдено письмо с темой «' + m.subject + '» за последние ' + m.searchDays + ' дн. в папке ' + m.folder + '.');
       cands.sort(function(a, b){ return b.date - a.date; });
       const best = cands[0];
