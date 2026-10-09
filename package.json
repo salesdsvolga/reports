@@ -1,0 +1,17 @@
+{
+  "name": "distribution-reports",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Автосборка отчётов для менеджеров из писем 1С",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "build": "node src/build.js --source=mail --encrypt",
+    "local": "node src/build.js --source=dir:samples"
+  },
+  "dependencies": {
+    "imapflow": "^2.3.0",
+    "mailparser": "^3.9.0",
+    "staticrypt": "^3.5.4",
+    "xlsx": "0.18.5"
+  }
+}
