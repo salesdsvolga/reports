@@ -2,7 +2,7 @@
   "mail": {
     "host": "imap.yandex.ru",
     "port": 993,
-    "folder": "INBOX",
+    "folder": "Отчёты",
     "subject": "123",
     "searchDays": 4,
     "maxAgeHours": 30
