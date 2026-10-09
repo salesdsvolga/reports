@@ -1,0 +1,58 @@
+name: Обновить отчёты
+
+on:
+  schedule:
+    # Время указывается по UTC. Самара = UTC+4, поэтому 06:30 UTC = 10:30 в Самаре.
+    # Хотите чаще — раскомментируйте строки ниже (или добавьте свои).
+    - cron: '30 6 * * *'     # 10:30 Самара
+    # - cron: '30 10 * * *'  # 14:30 Самара
+    # - cron: '30 14 * * *'  # 18:30 Самара
+  workflow_dispatch:         # кнопка «Run workflow» для ручного запуска
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Два запуска одновременно не нужны
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Установить зависимости
+        run: npm ci
+
+      - name: Собрать страницы из письма
+        run: node src/build.js --source=mail --encrypt
+        env:
+          MAIL_USER: ${{ secrets.MAIL_USER }}
+          MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
+          PASSWORDS: ${{ secrets.PASSWORDS }}
+          PLANS_JSON: ${{ vars.PLANS_JSON }}
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: out
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
