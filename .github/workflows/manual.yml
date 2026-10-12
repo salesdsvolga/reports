@@ -1,0 +1,58 @@
+name: Ручная загрузка отчётов
+
+# Запасной вариант, когда почта недоступна.
+# Запускается сам, когда в корень репозитория загружают новый manual.enc,
+# и вручную кнопкой Run workflow.
+on:
+  push:
+    branches: [main]
+    paths:
+      - manual.enc
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Тот же замок, что и у обычного обновления: два выкладывания сайта одновременно не нужны
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Установить зависимости
+        run: npm ci
+
+      - name: Собрать страницы из manual.enc
+        run: node manual.js
+        env:
+          MANUAL_PASSWORD: ${{ secrets.MANUAL_PASSWORD }}
+          PASSWORDS: ${{ secrets.PASSWORDS }}
+          PLANS_JSON: ${{ vars.PLANS_JSON }}
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: out
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
