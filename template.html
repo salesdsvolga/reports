@@ -417,6 +417,11 @@
     padding: 6px 4px;
   }
   .nosales-table .m-val.zero{ color: var(--ink-faint); font-weight:500; }
+  /* Месяцы: подпись и сумма лежат в одной ячейке, поэтому сетка не разъезжается
+     при любом числе месяцев в отчёте (3, 12, 13…) */
+  .nosales-table.months{ grid-template-columns: repeat(auto-fill, minmax(86px, 1fr)); gap: 8px 6px; }
+  .nosales-table.months .m-cell{ display:flex; flex-direction:column; gap:4px; min-width:0; }
+  .nosales-table.months .m-lbl{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
   /* Вкладка «Тёмные силы» */
   .dark-card .nosales-table .m-val.ok{ color: var(--hit); }
@@ -977,6 +982,7 @@
         </div>
         <button class="reset-btn" id="darkBackBtn">Сменить менеджера</button>
       </div>
+      <div class="status-filter" id="darkRangeFilter" role="group" aria-label="Фильтр по выполнению плана"></div>
       <div class="field" style="margin-bottom:12px;">
         <input type="text" id="darkSearch" placeholder="Поиск по точкам…" autocomplete="off">
         <button class="clear-x" id="darkClear" style="display:none;" aria-label="Очистить">
@@ -1109,6 +1115,21 @@
     resetSalesStep();
   });
 
+  // Сетка месяцев: подпись и сумма — в одной ячейке. Если месяцы относятся к разным годам, к подписи добавляется год.
+  function monthsGridHtml(months){
+    var years = {};
+    months.forEach(function(mo){ var y = /(\d{4})/.exec(mo.label || ''); if(y) years[y[1]] = 1; });
+    var multiYear = Object.keys(years).length > 1;
+    return '<div class="nosales-table months">' + months.map(function(mo){
+      var base = String(mo.label || '').replace(/\s*\d{4}\s*г\.?$/i, '');
+      var y = /(\d{4})/.exec(mo.label || '');
+      var lbl = base + (multiYear && y ? ' \u2019' + y[1].slice(2) : '');
+      var zero = !mo.revenue;
+      return '<div class="m-cell"><span class="m-lbl">' + esc(lbl) + '</span>' +
+        '<span class="m-val' + (zero ? ' zero' : '') + '">' + (zero ? '\u2014' : formatMoney(mo.revenue)) + '</span></div>';
+    }).join('') + '</div>';
+  }
+
   function renderNoSalesList(m){
     document.getElementById('nsManagerName').textContent = shortName(m);
     var list = salesByManager[m] || [];
@@ -1141,16 +1162,7 @@
       var prevMonths = e.months.slice(0, -1);
       var card = document.createElement('div');
       card.className = 'nosales-card';
-      var labelsHtml = prevMonths.map(function(mo){
-        return '<span class="m-lbl">'+esc(mo.label.replace(/\s*\d{4}\s*г\.?$/i,''))+'</span>';
-      }).join('');
-      var valuesHtml = prevMonths.map(function(mo){
-        var zero = !mo.revenue;
-        return '<span class="m-val'+(zero?' zero':'')+'">'+(zero ? '—' : formatMoney(mo.revenue))+'</span>';
-      }).join('');
-      card.innerHTML = '<div class="nosales-name">'+esc(e.t)+'</div>'+
-        '<div class="nosales-table">'+labelsHtml+'</div>'+
-        '<div class="nosales-table">'+valuesHtml+'</div>';
+      card.innerHTML = '<div class="nosales-name">'+esc(e.t)+'</div>'+monthsGridHtml(prevMonths);
       container.appendChild(card);
     });
   }
@@ -1294,16 +1306,7 @@
     list.forEach(function(e){
       var card = document.createElement('div');
       card.className = 'nosales-card';
-      var labelsHtml = e.months.map(function(mo){
-        return '<span class="m-lbl">'+esc(monthShort(mo.label))+'</span>';
-      }).join('');
-      var valuesHtml = e.months.map(function(mo){
-        var zero = !mo.revenue;
-        return '<span class="m-val'+(zero?' zero':'')+'">'+(zero ? '—' : formatMoney(mo.revenue))+'</span>';
-      }).join('');
-      card.innerHTML = '<div class="nosales-name">'+esc(e.t)+'</div>'+
-        '<div class="nosales-table">'+labelsHtml+'</div>'+
-        '<div class="nosales-table">'+valuesHtml+'</div>';
+      card.innerHTML = '<div class="nosales-name">'+esc(e.t)+'</div>'+monthsGridHtml(e.months);
       container.appendChild(card);
     });
   }
@@ -1372,6 +1375,7 @@
 
   function resetDarkView(){
     resetDarkSearch();
+    resetDarkRange();
     darkState.manager = null;
     Array.prototype.forEach.call(darkMgrGrid.children, function(c){ c.classList.remove('selected'); });
     document.getElementById('panelDarkList').style.display = 'none';
@@ -1379,6 +1383,7 @@
 
   function selectDarkManager(m, cardEl, silent){
     resetDarkSearch();
+    resetDarkRange();
     darkState.manager = m;
     Array.prototype.forEach.call(darkMgrGrid.children, function(c){ c.classList.remove('selected'); });
     cardEl.classList.add('selected');
@@ -1397,13 +1402,66 @@
   var darkDropdown = document.getElementById('darkDropdown');
   var darkHl = -1;
 
+  // ----- фильтр по выполнению плана (кнопки 0–20 / 20–80 / 80–100+) -----
+  // Границы: 0–20% — меньше 20; 20–80% — от 20 до 79; 80–100%+ — от 80 и выше (включая перевыполнение).
+  // Берётся тот же процент, что показан на карточке. Точки без плана попадают только в «без фильтра».
+  var darkRange = null;    // 'low' | 'mid' | 'high' | null
+  var DARK_RANGES = [
+    { key:'low',  label:'0\u201320%',    test:function(p){ return p < 20; } },
+    { key:'mid',  label:'20\u201380%',   test:function(p){ return p >= 20 && p < 80; } },
+    { key:'high', label:'80\u2013100%+', test:function(p){ return p >= 80; } }
+  ];
+  function darkInRange(e){
+    if(!darkRange) return true;
+    var p = darkPct(e);
+    if(p === null) return false;
+    var r = DARK_RANGES.filter(function(x){ return x.key === darkRange; })[0];
+    return !!r && r.test(p);
+  }
+  function paintDarkRange(){
+    var el = document.getElementById('darkRangeFilter');
+    if(!el) return;
+    Array.prototype.forEach.call(el.children, function(c){ c.classList.toggle('active', c.dataset.range === darkRange); });
+  }
+  function renderDarkRangeChips(m){
+    var el = document.getElementById('darkRangeFilter');
+    if(!el) return;
+    var counts = { low:0, mid:0, high:0 };
+    darkSortedList(m).forEach(function(e){
+      var p = darkPct(e);
+      if(p === null) return;
+      DARK_RANGES.forEach(function(r){ if(r.test(p)) counts[r.key]++; });
+    });
+    el.innerHTML = '';
+    DARK_RANGES.forEach(function(r){
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'status-chip' + (darkRange === r.key ? ' active' : '');
+      b.dataset.range = r.key;
+      b.title = 'Выполнение плана ' + r.label;
+      b.textContent = r.label + ' (' + counts[r.key] + ')';
+      b.addEventListener('click', function(){ setDarkRange(r.key); });
+      el.appendChild(b);
+    });
+  }
+  function setDarkRange(key){
+    darkRange = (darkRange === key) ? null : key; // повторный клик снимает фильтр
+    paintDarkRange();
+    if(darkPicked) resetDarkSearch();
+    if(darkState.manager){
+      renderDarkCards(darkState.manager);
+      if(darkDropdown.classList.contains('open')) renderDarkDropdown();
+    }
+  }
+  function resetDarkRange(){ darkRange = null; paintDarkRange(); }
+
   function darkSortedList(m){
     return (darkByManager[m] || []).slice().sort(function(a,b){
       return a.t.localeCompare(b.t, 'ru', {sensitivity:'base'});
     });
   }
   function darkMatches(m){
-    var list = darkSortedList(m);
+    var list = darkSortedList(m).filter(darkInRange);
     if(darkPicked) return list.filter(function(e){ return e.t === darkPicked; });
     var q = darkQuery.trim().toLocaleLowerCase('ru');
     if(!q) return list;
@@ -1412,6 +1470,7 @@
 
   function renderDarkList(m){
     document.getElementById('darkManagerName').textContent = shortName(m);
+    renderDarkRangeChips(m);
     var all = darkSortedList(m);
 
     // общий итог: доля точек с выполнением >= порога среди точек с выставленным планом
@@ -1488,7 +1547,7 @@
     if(!m){ closeDarkDropdown(); return; }
     var q = darkQuery.trim().toLocaleLowerCase('ru');
     var list = darkSortedList(m).filter(function(e){
-      return !q || e.t.toLocaleLowerCase('ru').indexOf(q) !== -1;
+      return darkInRange(e) && (!q || e.t.toLocaleLowerCase('ru').indexOf(q) !== -1);
     });
     darkDropdown.innerHTML = '';
     darkHl = -1;
