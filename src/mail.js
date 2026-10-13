@@ -12,11 +12,13 @@ async function fetchFromMail(cfg, env){
   const user = env.MAIL_USER, pass = env.MAIL_PASSWORD;
   if(!user || !pass) throw new Error('Не заданы секреты MAIL_USER и MAIL_PASSWORD (Settings → Secrets and variables → Actions).');
   const m = cfg.mail;
-  const client = new ImapFlow({ host: m.host, port: m.port, secure: m.secure !== false, auth: { user: user, pass: pass }, logger: false });
+   const host = process.env.MAIL_HOST || m.host;
+  const client = new ImapFlow({ host: host, port: m.port, secure: m.secure !== false, auth: { user: user, pass: pass }, logger: false });
   try{ await client.connect(); }
   catch(e){ throw new Error('Не удалось войти в почту (' + (e.responseText || e.message) + '). Проверьте MAIL_USER, MAIL_PASSWORD (нужен пароль приложения) и что IMAP включён.'); }
   try{
-    const lock = await client.getMailboxLock(m.folder);
+     const folder = process.env.MAIL_FOLDER || m.folder;
+    const lock = await client.getMailboxLock(folder);
     try{
       const since = new Date(Date.now() - m.searchDays * 86400000);
       const uids = await client.search({ since: since, subject: m.subject }, { uid: true });
