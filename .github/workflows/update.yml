@@ -29,31 +29,10 @@ jobs:
       - name: Установить зависимости
         run: npm ci
 
-      # --- Шаг 1: проверяем, доступна ли Яндекс.Почта ---
-      - name: Проверить доступность Яндекс.Почты
-        id: check_yandex
+      # --- Шаг 1: пробуем собрать из Яндекса ---
+      - name: Попробовать Яндекс
+        id: yandex
         continue-on-error: true
-        run: |
-          node -e "
-            const { ImapFlow } = require('imapflow');
-            const client = new ImapFlow({
-              host: 'imap.yandex.ru',
-              port: 993,
-              secure: true,
-              auth: { user: process.env.MAIL_USER, pass: process.env.MAIL_PASSWORD }
-            });
-            client.connect()
-              .then(() => client.logout())
-              .then(() => process.exit(0))
-              .catch((err) => { console.error('Yandex connection failed:', err.message); process.exit(1); });
-          "
-        env:
-          MAIL_USER: ${{ secrets.MAIL_USER }}
-          MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
-
-      # --- Шаг 2: основная сборка — с Яндекс.Почты ---
-      - name: Собрать страницы из Яндекс.Почты
-        if: steps.check_yandex.outcome == 'success'
         run: node src/build.js --source=mail --encrypt
         env:
           MAIL_HOST: 'imap.yandex.ru'
@@ -63,9 +42,13 @@ jobs:
           PASSWORDS: ${{ secrets.PASSWORDS }}
           PLANS_JSON: ${{ vars.PLANS_JSON }}
 
-      # --- Шаг 3: резервная сборка — с Gmail ---
-      - name: Собрать страницы из Gmail (резерв)
-        if: steps.check_yandex.outcome == 'failure'
+      # --- Шаг 2: если Яндекс не дал свежих данных — пробуем Gmail ---
+      # Условие: шаг 1 завершился с ошибкой (нет письма, письмо старое,
+      # сервер лежит, папки нет — любая причина).
+      - name: Попробовать Gmail (резерв)
+        id: gmail
+        if: steps.yandex.outcome == 'failure'
+        continue-on-error: true
         run: node src/build.js --source=mail --encrypt
         env:
           MAIL_HOST: 'imap.gmail.com'
@@ -74,6 +57,16 @@ jobs:
           MAIL_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           PASSWORDS: ${{ secrets.PASSWORDS }}
           PLANS_JSON: ${{ vars.PLANS_JSON }}
+
+      # --- Шаг 3: если оба источника не дали данных — валим workflow ---
+      - name: Проверить, что сборка удалась
+        if: steps.yandex.outcome == 'failure' && steps.gmail.outcome == 'failure'
+        run: |
+          echo "❌ Обе почты не дали свежих данных."
+          echo "   Яндекс: ${{ steps.yandex.outcome }}"
+          echo "   Gmail:  ${{ steps.gmail.outcome }}"
+          echo "Проверьте, отправила ли 1С отчёты, и доходят ли письма до Gmail."
+          exit 1
 
       - uses: actions/configure-pages@v5
 
