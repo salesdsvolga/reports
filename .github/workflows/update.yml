@@ -56,6 +56,8 @@ jobs:
         if: steps.check_yandex.outcome == 'success'
         run: node src/build.js --source=mail --encrypt
         env:
+          MAIL_HOST: 'imap.yandex.ru'
+          MAIL_FOLDER: 'Отчёты'
           MAIL_USER: ${{ secrets.MAIL_USER }}
           MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
           PASSWORDS: ${{ secrets.PASSWORDS }}
@@ -66,6 +68,8 @@ jobs:
         if: steps.check_yandex.outcome == 'failure'
         run: node src/build.js --source=mail --encrypt
         env:
+          MAIL_HOST: 'imap.gmail.com'
+          MAIL_FOLDER: 'INBOX'
           MAIL_USER: ${{ secrets.GMAIL_USER }}
           MAIL_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           PASSWORDS: ${{ secrets.PASSWORDS }}
