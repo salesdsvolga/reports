@@ -62,11 +62,39 @@
     min-height: 100vh;
   }
   header.top{
+    position:relative;
     display:flex;
     align-items:center;
     justify-content:space-between;
     padding: 6px 2px 20px;
   }
+  .logo{
+    font-family:'Space Grotesk', sans-serif;
+    font-weight:700;
+    font-size: 21px;
+    line-height:1.15;
+    letter-spacing: 0.06em;
+    color: var(--ink);
+  }
+  .logo span{ color: var(--amber); }
+  .top-actions{ display:flex; gap:8px; }
+  .periods-panel{
+    position:absolute;
+    top: 52px; right: 0; z-index: 50;
+    min-width: 250px; max-width: calc(100vw - 32px);
+    padding: 12px 14px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    box-shadow: 0 10px 30px rgba(0,0,0,.35);
+    font-family:'Manrope', sans-serif;
+  }
+  .periods-panel[hidden]{ display:none; }
+  .periods-panel h3{ margin:0 0 8px; font-size:12px; font-weight:700; color:var(--ink-dim); text-transform:uppercase; letter-spacing:.04em; }
+  .periods-panel .prow{ display:flex; justify-content:space-between; gap:14px; padding:5px 0; font-size:12.5px; border-top:1px solid var(--line); }
+  .periods-panel .prow:first-of-type{ border-top:0; }
+  .periods-panel .prow b{ font-weight:600; color:var(--ink); }
+  .periods-panel .prow span{ color:var(--amber); font-weight:600; text-align:right; }
   .brand{
     display:flex;
     flex-direction:column;
@@ -817,13 +845,18 @@
 
   <header class="top">
     <div class="brand">
-      <span class="eyebrow">DS-VOLGA · САМАРА</span>
-      <h1>Незакупленные позиции</h1>
+      <div class="logo">DS-VOLGA <span>REPORTS</span></div>
       <div class="period-badge" id="periodBadge" style="display:none;"></div>
     </div>
+    <div class="top-actions">
+    <button class="theme-btn" id="periodsBtn" title="Периоды отчётов" aria-label="Периоды отчётов" aria-expanded="false" aria-controls="periodsPanel" style="display:none;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M3 10h18M8 3v4M16 3v4"></path></svg>
+    </button>
     <button class="theme-btn" id="themeBtn" title="Тема" aria-label="Переключить тему">
       <svg id="themeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"></path></svg>
     </button>
+    </div>
+    <div class="periods-panel" id="periodsPanel" hidden></div>
   </header>
 
   <div class="view-tabs" id="viewTabs">
@@ -1756,25 +1789,40 @@
 
   function renderPeriodBadge(){
     var el = document.getElementById('periodBadge');
+    var btn = document.getElementById('periodsBtn');
+    var panel = document.getElementById('periodsPanel');
     if(!el) return;
+    // в шапке — только дата и время формирования
+    if(META && META.generatedAt){ el.textContent = 'Сформирован: ' + META.generatedAt; el.style.display = 'block'; }
+    else { el.style.display = 'none'; el.textContent = ''; }
+    // периоды загруженных отчётов — по кнопке
     var chans = (META && META.channels) ? META.channels : {};
     var keys = Object.keys(chans);
-    var parts = [];
-    if(keys.length){
-      var periods = keys.map(function(k){ return chans[k].period; }).filter(Boolean);
-      var uniq = periods.filter(function(p,i){ return periods.indexOf(p) === i; });
-      if(uniq.length === 1){
-        parts.push('Период отчёта: ' + uniq[0]);
-      } else if(uniq.length > 1){
-        parts.push(keys.map(function(k){ return k + ': ' + (chans[k].period || '—'); }).join(' · '));
+    if(btn) btn.style.display = keys.length ? '' : 'none';
+    if(panel){
+      panel.innerHTML = '';
+      panel.hidden = true;
+      if(btn) btn.setAttribute('aria-expanded', 'false');
+      if(keys.length){
+        var h = document.createElement('h3'); h.textContent = 'Периоды отчётов'; panel.appendChild(h);
+        keys.forEach(function(k){
+          var row = document.createElement('div'); row.className = 'prow';
+          var b = document.createElement('b'); b.textContent = k;
+          var s = document.createElement('span'); s.textContent = chans[k].period || '—';
+          row.appendChild(b); row.appendChild(s); panel.appendChild(row);
+        });
       }
     }
-    if(META && META.generatedAt){
-      parts.push('Сформирован: ' + META.generatedAt);
-    }
-    if(parts.length){ el.textContent = parts.join(' · '); el.style.display = 'block'; }
-    else { el.style.display = 'none'; el.textContent = ''; }
   }
+  (function(){
+    var btn = document.getElementById('periodsBtn');
+    var panel = document.getElementById('periodsPanel');
+    if(!btn || !panel) return;
+    function setOpen(o){ panel.hidden = !o; btn.setAttribute('aria-expanded', o ? 'true' : 'false'); }
+    btn.addEventListener('click', function(e){ e.stopPropagation(); setOpen(panel.hidden); });
+    document.addEventListener('click', function(e){ if(!panel.hidden && !panel.contains(e.target)) setOpen(false); });
+    document.addEventListener('keydown', function(e){ if(e.key === 'Escape') setOpen(false); });
+  })();
 
   function selectManager(m, cardEl, silent){
     state.manager = m;
