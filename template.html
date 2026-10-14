@@ -107,6 +107,11 @@
   .periods-panel .prow:first-of-type{ border-top:0; }
   .periods-panel .prow b{ font-weight:600; color:var(--ink); }
   .periods-panel .prow span{ color:var(--amber); font-weight:600; text-align:right; }
+  .tips-panel{ min-width:300px; max-width:min(420px, calc(100vw - 32px)); max-height:70vh; overflow:auto; }
+  .tips-panel .tip{ padding:8px 0; border-top:1px solid var(--line); font-size:12.5px; line-height:1.4; color:var(--ink); }
+  .tips-panel .tip:first-of-type{ border-top:0; }
+  .tips-panel .tip b{ display:block; margin-bottom:2px; font-weight:600; color:var(--amber); }
+  .tips-panel .tip-note{ margin-top:8px; font-size:11px; color:var(--ink-dim); }
   .brand{
     display:flex;
     flex-direction:column;
@@ -868,11 +873,15 @@
     <button class="theme-btn" id="periodsBtn" title="Периоды отчётов" aria-label="Периоды отчётов" aria-expanded="false" aria-controls="periodsPanel" style="display:none;">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M3 10h18M8 3v4M16 3v4"></path></svg>
     </button>
+    <button class="theme-btn" id="tipsBtn" title="Советы" aria-label="Советы" aria-expanded="false" aria-controls="tipsPanel" style="display:none;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"></path></svg>
+    </button>
     <button class="theme-btn" id="themeBtn" title="Тема" aria-label="Переключить тему">
       <svg id="themeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"></path></svg>
     </button>
     </div>
     <div class="periods-panel" id="periodsPanel" hidden></div>
+    <div class="periods-panel tips-panel" id="tipsPanel" hidden></div>
   </header>
 
   <div class="view-tabs" id="viewTabs">
@@ -1834,6 +1843,28 @@
     var btn = document.getElementById('periodsBtn');
     var panel = document.getElementById('periodsPanel');
     if(!btn || !panel) return;
+    function setOpen(o){ panel.hidden = !o; btn.setAttribute('aria-expanded', o ? 'true' : 'false'); }
+    btn.addEventListener('click', function(e){ e.stopPropagation(); setOpen(panel.hidden); });
+    document.addEventListener('click', function(e){ if(!panel.hidden && !panel.contains(e.target)) setOpen(false); });
+    document.addEventListener('keydown', function(e){ if(e.key === 'Escape') setOpen(false); });
+  })();
+  // «Советы» — готовятся при сборке (Gemini); если советов нет, кнопка скрыта
+  (function(){
+    var btn = document.getElementById('tipsBtn');
+    var panel = document.getElementById('tipsPanel');
+    var tips = (PAYLOAD && PAYLOAD.tips) || [];
+    if(!btn || !panel || !tips.length) return;
+    var h = document.createElement('h3'); h.textContent = 'Советы'; panel.appendChild(h);
+    tips.forEach(function(t){
+      var row = document.createElement('div'); row.className = 'tip';
+      if(t.title){ var b = document.createElement('b'); b.textContent = t.title; row.appendChild(b); }
+      row.appendChild(document.createTextNode(t.text));
+      panel.appendChild(row);
+    });
+    var note = document.createElement('div'); note.className = 'tip-note';
+    note.textContent = 'Подготовлено автоматически по данным отчётов' + (META && META.generatedAt ? ' от ' + META.generatedAt : '');
+    panel.appendChild(note);
+    btn.style.display = '';
     function setOpen(o){ panel.hidden = !o; btn.setAttribute('aria-expanded', o ? 'true' : 'false'); }
     btn.addEventListener('click', function(e){ e.stopPropagation(); setOpen(panel.hidden); });
     document.addEventListener('click', function(e){ if(!panel.hidden && !panel.contains(e.target)) setOpen(false); });
