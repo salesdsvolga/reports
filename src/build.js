@@ -71,8 +71,8 @@ function encryptPage(plainPath, outDir, password){
     '--template-button', 'Открыть',
     '--template-error', 'Неверный пароль',
     '--template-remember', 'Запомнить на этом устройстве',
-    '--template-color-primary', '#e08a34',
-    '--template-color-secondary', '#171512'
+    '--template-color-primary', '#2f2f2f',
+    '--template-color-secondary', '#000000'
   ], { cwd: ROOT, env: Object.assign({}, process.env, { STATICRYPT_PASSWORD: password }), stdio: ['ignore', 'ignore', 'inherit'] });
 }
 
