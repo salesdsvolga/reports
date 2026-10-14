@@ -6,8 +6,11 @@
 
 // Модель можно сменить без правки кода: переменная GEMINI_MODEL в Actions (Variables).
 const DEFAULT_MODEL = 'gemini-flash-latest';
+// Если основная модель перегружена (503/429) — пробуем запасную, более лёгкую.
+const FALLBACK_MODEL = 'gemini-flash-lite-latest';
+const RETRY_DELAYS_MS = [4000, 12000]; // пауза перед 2-й и 3-й попыткой на каждой модели
 // Отправлять ли в Google названия торговых точек. По умолчанию — нет (только агрегаты).
-const SEND_POINT_NAMES = true;
+const SEND_POINT_NAMES = false;
 const TIMEOUT_MS = 45000;
 
 function sum(arr){ return arr.reduce(function(a, b){ return a + (Number(b) || 0); }, 0); }
@@ -87,13 +90,12 @@ function summarize(payload, managerName){
 
 const PROMPT =
   'Ты помощник менеджера по дистрибуции. Ниже — сводка по его портфелю за текущий месяц (JSON). ' +
-  'Составь 3–7 коротких практичных советов, что сделать в первую очередь, чтобы вырасти в продажах и выполнить планы. ' +
+  'Составь 3–5 коротких практичных советов, что сделать в первую очередь, чтобы вырасти в продажах и выполнить планы. ' +
   'Правила: пиши по-русски, обращайся на «вы»; опирайся ТОЛЬКО на данные из сводки, не выдумывай цифры и названия; ' +
   'каждый совет — 1–2 предложения; сначала самое важное (где самый большой отрыв от плана или больше всего упущенного). ' +
   'Верни строго JSON: {"tips":[{"title":"до 5 слов","text":"совет"}]}.';
 
-async function callGemini(summary, env){
-  const model = env.GEMINI_MODEL || DEFAULT_MODEL;
+async function callGemini(summary, env, model){
   const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent';
   const ctrl = new AbortController();
   const timer = setTimeout(function(){ ctrl.abort(); }, TIMEOUT_MS);
@@ -107,7 +109,11 @@ async function callGemini(summary, env){
       }),
       signal: ctrl.signal
     });
-    if(!res.ok) throw new Error('HTTP ' + res.status + ' ' + (await res.text()).slice(0, 200));
+    if(!res.ok){
+      const err = new Error('HTTP ' + res.status + ' [' + model + '] ' + (await res.text()).replace(/\s+/g, ' ').slice(0, 160));
+      err.status = res.status;
+      throw err;
+    }
     const j = await res.json();
     const text = j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts
       .map(function(p){ return p.text || ''; }).join('');
@@ -118,13 +124,34 @@ async function callGemini(summary, env){
   } finally { clearTimeout(timer); }
 }
 
+function sleep(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
+
+// Повторяем при временных ошибках (503/429/500/сеть/таймаут); при 400/403/404 повторять бессмысленно.
+async function callWithRetry(summary, env){
+  const models = [env.GEMINI_MODEL || DEFAULT_MODEL];
+  if(FALLBACK_MODEL !== models[0]) models.push(FALLBACK_MODEL);
+  let lastErr;
+  for(const model of models){
+    for(let i = 0; i <= RETRY_DELAYS_MS.length; i++){
+      try{ return await callGemini(summary, env, model); }
+      catch(e){
+        lastErr = e;
+        const transient = !e.status || e.status === 429 || e.status >= 500;
+        if(!transient) break;               // постоянная ошибка — сразу к следующей модели
+        if(i < RETRY_DELAYS_MS.length){ console.log('  … ' + model + ': ' + (e.status || 'сбой') + ', повтор через ' + RETRY_DELAYS_MS[i] / 1000 + ' с'); await sleep(RETRY_DELAYS_MS[i]); }
+      }
+    }
+  }
+  throw lastErr;
+}
+
 // pages: массив {slug, payload, managerName?}. Дописывает payload.tips там, где получилось.
 async function addTips(pages, env){
   if(!env.GEMINI_API_KEY){ console.log('  💡 GEMINI_API_KEY не задан — советы пропущены.'); return; }
   for(const p of pages){
     if(!p.managerName) continue; // общая страница — без советов
     try{
-      const tips = await callGemini(summarize(p.payload, p.managerName), env);
+      const tips = await callWithRetry(summarize(p.payload, p.managerName), env);
       if(tips){ p.payload.tips = tips; console.log('  💡 ' + p.slug + ': советов ' + tips.length); }
     }catch(e){
       console.warn('  ⚠ Советы для «' + p.slug + '» не получены (' + (e && e.message ? e.message : e) + ') — страница соберётся без них.');
