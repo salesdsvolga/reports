@@ -33,7 +33,7 @@ jobs:
       - name: Попробовать Яндекс
         id: yandex
         continue-on-error: true
-        run: node src/build.js --source=mail --encrypt
+        run: node src/build.js --source=mail --encrypt --tips
         env:
           MAIL_HOST: 'imap.yandex.ru'
           MAIL_FOLDER: 'Отчёты'
@@ -41,6 +41,8 @@ jobs:
           MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
           PASSWORDS: ${{ secrets.PASSWORDS }}
           PLANS_JSON: ${{ vars.PLANS_JSON }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
 
       # --- Шаг 2: если Яндекс не дал свежих данных — пробуем Gmail ---
       # Условие: шаг 1 завершился с ошибкой (нет письма, письмо старое,
@@ -49,7 +51,7 @@ jobs:
         id: gmail
         if: steps.yandex.outcome == 'failure'
         continue-on-error: true
-        run: node src/build.js --source=mail --encrypt
+        run: node src/build.js --source=mail --encrypt --tips
         env:
           MAIL_HOST: 'imap.gmail.com'
           MAIL_FOLDER: 'INBOX'
@@ -57,6 +59,8 @@ jobs:
           MAIL_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           PASSWORDS: ${{ secrets.PASSWORDS }}
           PLANS_JSON: ${{ vars.PLANS_JSON }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
 
       # --- Шаг 3: если оба источника не дали данных — валим workflow ---
       - name: Проверить, что сборка удалась
