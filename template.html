@@ -2,48 +2,49 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
+<meta name="theme-color" content="#000000">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <title>Дистрибуция — незакупленные позиции</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg: #171512;
-    --bg-2: #1e1b17;
-    --panel: #23201b;
-    --panel-2: #2b2721;
-    --line: #37322a;
-    --ink: #f3ede4;
-    --ink-dim: #b8ad9c;
-    --ink-faint: #7d7365;
-    --amber: #e08a34;
-    --amber-deep: #b8631a;
-    --amber-ink: #1a1108;
-    --miss: #d9603f;
-    --miss-bg: #2c1a14;
-    --hit: #6fa66a;
-    --hit-bg: #182119;
-    --radius: 14px;
-    --radius-sm: 9px;
+    --bg: #000000;
+    --bg-2: #0b0b0b;
+    --panel: #0d0d0d;
+    --panel-2: #1a1a1a;
+    --line: #3a3a3a;
+    --ink: #ffffff;
+    --ink-dim: #b0b0b0;
+    --ink-faint: #726c6c;
+    --amber: #ffffff;
+    --amber-deep: #e0e0e0;
+    --amber-ink: #000000;
+    --miss: #ff3b3b;
+    --miss-bg: #2a0e0e;
+    --hit: #5fbf6a;
+    --hit-bg: #0f1f12;
+    --radius: 12px;
+    --radius-sm: 10px;
   }
   :root:not([data-theme="light"]) { color-scheme: dark; }
   :root[data-theme="light"]{
-    --bg: #f6f2ea;
-    --bg-2: #efe9de;
+    --bg: #f2f2f2;
+    --bg-2: #e8e8e8;
     --panel: #ffffff;
-    --panel-2: #f4efe5;
-    --line: #ddd3c0;
-    --ink: #241f18;
-    --ink-dim: #6b6153;
-    --ink-faint: #9a9081;
-    --amber: #c26a1e;
-    --amber-deep: #a35815;
+    --panel-2: #f5f5f5;
+    --line: #d0d0d0;
+    --ink: #000000;
+    --ink-dim: #555555;
+    --ink-faint: #8a8a8a;
+    --amber: #000000;
+    --amber-deep: #222222;
     --amber-ink: #ffffff;
-    --miss: #b8452a;
-    --miss-bg: #fbe7e0;
-    --hit: #4f8a4a;
-    --hit-bg: #e7f1e5;
+    --miss: #d41f1f;
+    --miss-bg: #fde8e8;
+    --hit: #2e8b3d;
+    --hit-bg: #e6f4e8;
     color-scheme: light;
   }
   *{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -51,7 +52,7 @@
   body{
     background: radial-gradient(1200px 800px at 50% -10%, var(--bg-2), var(--bg) 60%);
     color: var(--ink);
-    font-family: 'Manrope', system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-family: 'Circe','Manrope', system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     min-height: 100vh;
     -webkit-font-smoothing: antialiased;
   }
@@ -69,14 +70,25 @@
     padding: 6px 2px 20px;
   }
   .logo{
-    font-family:'Space Grotesk', sans-serif;
-    font-weight:700;
-    font-size: 21px;
-    line-height:1.15;
-    letter-spacing: 0.06em;
+    display:inline-flex;
+    flex-direction:column;
+    align-items:center;
+    font-family:'Uni Sans','Montserrat',Arial,sans-serif;
+    font-weight:800;
+    font-size:25px;
+    line-height:1;
+    letter-spacing:.04em;
+    text-transform:uppercase;
     color: var(--ink);
   }
-  .logo span{ color: var(--amber); }
+  .logo span{
+    margin-top:5px;
+    padding-left:.75em;
+    font-size:7px;
+    font-weight:600;
+    letter-spacing:.75em;
+    color: var(--ink);
+  }
   .top-actions{ display:flex; gap:8px; }
   .periods-panel{
     position:absolute;
@@ -87,7 +99,7 @@
     border: 1px solid var(--line);
     border-radius: var(--radius-sm);
     box-shadow: 0 10px 30px rgba(0,0,0,.35);
-    font-family:'Manrope', sans-serif;
+    font-family:'Circe','Manrope',Arial,sans-serif;
   }
   .periods-panel[hidden]{ display:none; }
   .periods-panel h3{ margin:0 0 8px; font-size:12px; font-weight:700; color:var(--ink-dim); text-transform:uppercase; letter-spacing:.04em; }
@@ -101,14 +113,14 @@
     gap: 2px;
   }
   .brand .eyebrow{
-    font-family:'Space Grotesk', sans-serif;
+    font-family:'Uni Sans','Montserrat',Arial,sans-serif;
     font-weight:600;
     font-size: 12.5px;
     letter-spacing: 0.02em;
     color: var(--amber);
   }
   .brand h1{
-    font-family:'Space Grotesk', sans-serif;
+    font-family:'Uni Sans','Montserrat',Arial,sans-serif;
     font-weight:700;
     font-size: 19px;
     margin: 0;
@@ -120,7 +132,7 @@
     font-size: 11.5px;
     font-weight: 600;
     color: var(--amber);
-    font-family: 'Manrope', sans-serif;
+    font-family: 'Circe','Manrope',Arial,sans-serif;
   }
   .theme-btn{
     border: 1px solid var(--line);
@@ -150,7 +162,7 @@
     font-size: 11px;
     font-weight:700;
     display:flex; align-items:center; justify-content:center;
-    font-family:'Space Grotesk', sans-serif;
+    font-family:'Uni Sans','Montserrat',Arial,sans-serif;
     flex:0 0 auto;
     transition: all .2s ease;
   }
@@ -170,7 +182,7 @@
     margin-bottom: 14px;
   }
   .panel h2{
-    font-family:'Space Grotesk', sans-serif;
+    font-family:'Uni Sans','Montserrat',Arial,sans-serif;
     font-size: 14.5px;
     font-weight: 600;
     margin: 0 0 12px;
@@ -178,7 +190,7 @@
   }
   .panel h2 small{
     display:block;
-    font-family:'Manrope', sans-serif;
+    font-family:'Circe','Manrope',Arial,sans-serif;
     font-weight:500;
     font-size: 12.5px;
     color: var(--ink-faint);
@@ -210,7 +222,7 @@
     padding: 12px 10px;
     cursor:pointer;
     text-align:left;
-    font-family:'Manrope', sans-serif;
+    font-family:'Circe','Manrope',Arial,sans-serif;
     color: var(--ink);
   }
   .mgr-card .av{
@@ -218,7 +230,7 @@
     border-radius:50%;
     background: var(--amber);
     color: var(--amber-ink);
-    font-family:'Space Grotesk', sans-serif;
+    font-family:'Uni Sans','Montserrat',Arial,sans-serif;
     font-weight:700;
     font-size: 13px;
     display:flex; align-items:center; justify-content:center;
@@ -250,7 +262,7 @@
     border: 1px solid var(--line);
     color: var(--ink);
     font-size: 16px;
-    font-family:'Manrope', sans-serif;
+    font-family:'Circe','Manrope',Arial,sans-serif;
     padding: 13px 40px 13px 14px;
     border-radius: var(--radius-sm);
     outline: none;
@@ -266,7 +278,7 @@
     right: 8px; top: 50%;
     transform: translateY(-50%);
     width: 28px; height:28px;
-    border-radius:8px;
+    border-radius: 10px;
     border:none;
     background: transparent;
     color: var(--ink-faint);
@@ -290,7 +302,7 @@
     font-weight:700;
     color: var(--amber);
     padding: 8px 12px 4px;
-    font-family:'Space Grotesk', sans-serif;
+    font-family:'Uni Sans','Montserrat',Arial,sans-serif;
   }
   .dropdown .opt{
     padding: 10px 12px;
@@ -332,10 +344,10 @@
     background: var(--panel-2);
     color: var(--ink-dim);
     font-size: 12px;
-    font-family:'Manrope', sans-serif;
+    font-family:'Circe','Manrope',Arial,sans-serif;
     font-weight:600;
     padding: 6px 12px;
-    border-radius: 999px;
+    border-radius: 10px;
     cursor: pointer;
     white-space: nowrap;
   }
@@ -359,11 +371,11 @@
     border:none;
     background:transparent;
     color: var(--ink-dim);
-    font-family:'Manrope', sans-serif;
+    font-family:'Circe','Manrope',Arial,sans-serif;
     font-weight:600;
     font-size: 12.5px;
     padding: 9px 6px;
-    border-radius: 8px;
+    border-radius: 10px;
     cursor:pointer;
   }
   .tt-tab.active{
@@ -378,7 +390,7 @@
     margin-bottom: 16px;
     background: var(--panel);
     border: 1px solid var(--line);
-    border-radius: 12px;
+    border-radius: 10px;
     padding: 4px;
   }
   .view-tab{
@@ -386,11 +398,11 @@
     border:none;
     background:transparent;
     color: var(--ink-dim);
-    font-family:'Manrope', sans-serif;
+    font-family:'Circe','Manrope',Arial,sans-serif;
     font-weight:700;
     font-size: 12.5px;
     padding: 11px 8px;
-    border-radius: 9px;
+    border-radius: 10px;
     cursor:pointer;
   }
   .view-tab.active{
@@ -411,11 +423,11 @@
   .nosales-card{
     background: var(--panel-2);
     border: 1px solid var(--line);
-    border-radius: 12px;
+    border-radius: 10px;
     padding: 12px 13px;
   }
   .nosales-card .nosales-name{
-    font-family:'Space Grotesk', sans-serif;
+    font-family:'Uni Sans','Montserrat',Arial,sans-serif;
     font-weight:700;
     font-size: 13.5px;
     line-height:1.3;
@@ -435,13 +447,13 @@
     text-align:center;
   }
   .nosales-table .m-val{
-    font-family:'Space Grotesk', sans-serif;
+    font-family:'Uni Sans','Montserrat',Arial,sans-serif;
     font-weight:700;
     font-size: 13px;
     text-align:center;
     background: var(--panel);
     border: 1px solid var(--line);
-    border-radius: 8px;
+    border-radius: 10px;
     padding: 6px 4px;
   }
   .nosales-table .m-val.zero{ color: var(--ink-faint); font-weight:500; }
@@ -474,7 +486,7 @@
   .plan-card{
     background: var(--panel-2);
     border: 1px solid var(--line);
-    border-radius: 12px;
+    border-radius: 10px;
     padding: 12px 13px;
     margin-bottom: 12px;
   }
@@ -490,7 +502,7 @@
     color:var(--ink-faint);
   }
   .plan-card .plan-pct{
-    font-family:'Space Grotesk', sans-serif;
+    font-family:'Uni Sans','Montserrat',Arial,sans-serif;
     font-weight:700;
     font-size:20px;
     line-height:1;
@@ -535,7 +547,7 @@
     font-weight:700;
     color:var(--ink-dim);
     margin-bottom:5px;
-    font-family:'Manrope', sans-serif;
+    font-family:'Circe','Manrope',Arial,sans-serif;
     line-height:1.3;
   }
   .plan-field input{
@@ -544,9 +556,9 @@
     border:1px solid var(--line);
     color:var(--ink);
     font-size:15px;
-    font-family:'Manrope', sans-serif;
+    font-family:'Circe','Manrope',Arial,sans-serif;
     padding:8px 10px;
-    border-radius:8px;
+    border-radius: 10px;
     outline:none;
   }
   .plan-field input:focus{ border-color:var(--amber); }
@@ -569,7 +581,7 @@
     padding: 11px 12px;
     cursor:pointer;
     text-align:left;
-    font-family:'Manrope', sans-serif;
+    font-family:'Circe','Manrope',Arial,sans-serif;
     color: var(--ink);
   }
   .upsell-item:active{ opacity:.85; }
@@ -580,13 +592,13 @@
     min-width:0;
   }
   .upsell-item .badge{
-    font-family:'Space Grotesk', sans-serif;
+    font-family:'Uni Sans','Montserrat',Arial,sans-serif;
     font-weight:700;
     font-size: 12.5px;
     background: var(--miss-bg);
     color: var(--miss);
     border: 1px solid color-mix(in srgb, var(--miss) 45%, var(--line));
-    border-radius: 999px;
+    border-radius: 10px;
     padding: 3px 11px;
     flex: 0 0 auto;
   }
@@ -611,7 +623,7 @@
     margin-bottom: 12px;
   }
   .tt-card .tt-name{
-    font-family:'Space Grotesk', sans-serif;
+    font-family:'Uni Sans','Montserrat',Arial,sans-serif;
     font-weight:700;
     font-size: 15.5px;
     line-height:1.3;
@@ -626,7 +638,7 @@
     display:inline-block;
     background: var(--panel-2);
     border:1px solid var(--line);
-    border-radius: 6px;
+    border-radius: 10px;
     padding: 1px 7px;
     font-size: 11px;
     margin: 2px 5px 0 0;
@@ -639,9 +651,9 @@
     color: var(--ink-dim);
     font-size: 12px;
     padding: 7px 11px;
-    border-radius: 8px;
+    border-radius: 10px;
     cursor:pointer;
-    font-family: 'Manrope', sans-serif;
+    font-family: 'Circe','Manrope',Arial,sans-serif;
     white-space: nowrap;
   }
 
@@ -659,7 +671,7 @@
   .score.miss{ background: var(--miss-bg); border-color: color-mix(in srgb, var(--miss) 45%, var(--line)); }
   .score.hit{ background: var(--hit-bg); border-color: color-mix(in srgb, var(--hit) 45%, var(--line)); }
   .score .num{
-    font-family:'Space Grotesk', sans-serif;
+    font-family:'Uni Sans','Montserrat',Arial,sans-serif;
     font-weight:700;
     font-size: 24px;
     line-height:1;
@@ -680,7 +692,7 @@
     padding: 0 2px;
   }
   .section-title h3{
-    font-family:'Space Grotesk', sans-serif;
+    font-family:'Uni Sans','Montserrat',Arial,sans-serif;
     font-size: 13px;
     font-weight:700;
     margin:0;
@@ -719,7 +731,7 @@
   .plist li.hit .mk{ background: var(--hit-bg); color: var(--hit); border: 1px solid color-mix(in srgb, var(--hit) 45%, var(--line)); }
   .plist .pname{ flex:1; line-height:1.35; }
   .plist .qty{
-    font-family:'Space Grotesk', sans-serif;
+    font-family:'Uni Sans','Montserrat',Arial,sans-serif;
     font-weight:700;
     font-size: 12.5px;
     color: var(--ink-faint);
@@ -732,7 +744,7 @@
     background: transparent;
     border: none;
     padding: 16px 2px 2px;
-    font-family:'Space Grotesk', sans-serif;
+    font-family:'Uni Sans','Montserrat',Arial,sans-serif;
     font-size: 11px;
     font-weight: 700;
     letter-spacing: .04em;
@@ -794,7 +806,7 @@
     border: 1px solid var(--line);
     background: var(--panel);
     color: var(--ink);
-    font-family:'Manrope', sans-serif;
+    font-family:'Circe','Manrope',Arial,sans-serif;
     font-weight: 600;
     font-size: 13px;
     padding: 11px 12px;
@@ -838,6 +850,10 @@
   }
   .src-status.ok{ color: var(--hit); }
   .src-status.err{ color: var(--miss); }
+  html{ scrollbar-color: var(--ink) var(--bg); }
+  ::-webkit-scrollbar{ width:6px; height:6px; }
+  ::-webkit-scrollbar-thumb{ background: var(--ink); border-radius:6px; }
+  ::-webkit-scrollbar-track{ background: var(--bg); }
 </style>
 </head>
 <body>
@@ -936,7 +952,7 @@
 
     <details class="hitwrap" id="hitWrap">
       <summary>
-        <h3 style="font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:700;">Уже закуплено</h3>
+        <h3 style="font-family:'Uni Sans','Montserrat',Arial,sans-serif;font-size:13px;font-weight:700;">Уже закуплено</h3>
         <svg class="chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
       </summary>
       <ul class="plist" id="hitList"></ul>
