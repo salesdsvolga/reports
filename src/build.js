@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Сборка страниц для менеджеров.
 //   node src/build.js --source=mail --encrypt     (так работает GitHub Actions)
+//   добавьте --tips, чтобы получить советы от Gemini (нужен GEMINI_API_KEY; без флага Gemini не вызывается)
 //   node src/build.js --source=dir:samples        (проверка на файлах из папки, без почты)
 //   node src/build.js --source=eml:letter.eml     (проверка на сохранённом письме)
 const fs = require('fs');
@@ -133,7 +134,7 @@ async function main(){
       console.warn('  ⚠ у менеджера «' + mg.name + '» нет данных в ММЛ или «Продажи АКБ» — проверьте, что менеджер записан в отчётах так же, как в config.json.');
     }
     if(!rows) return console.warn('  ⚠ для «' + mg.name + '» данных нет вообще, страница не создаётся.');
-    pages.push({ slug: mg.slug, title: 'Незакупленные позиции — ' + shortName(mg.name), payload: payload,
+    pages.push({ slug: mg.slug, managerName: mg.name, title: 'Незакупленные позиции — ' + shortName(mg.name), payload: payload,
       info: mg.name + ': позиций ' + payload.data.length + ', АКБ ' + payload.sales.length + ', аксессуары ' + payload.accessories.length + ', ЭСДН ' + payload.esdn.length + ', тёмные силы ' + payload.dark.length });
   });
   if(cfg.allPage && cfg.allPage.enabled){
@@ -142,6 +143,8 @@ async function main(){
       info: 'Общая страница: все менеджеры' });
   }
   if(!pages.length) fail('Ни одной страницы не получилось собрать.');
+
+  if(args.tips) await require('./tips').addTips(pages, process.env); // только автосборка; ручная сборка флаг не передаёт
 
   pages.forEach(function(p){
     fs.writeFileSync(path.join(WORK, 'plain', p.slug + '.html'), renderPage(template, p.payload, p.title));
