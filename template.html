@@ -983,6 +983,13 @@
         </div>
         <button class="reset-btn" id="nsBackBtn">Сменить менеджера</button>
       </div>
+      <div class="field" style="margin-bottom:12px;">
+        <input type="text" id="nsSearch" placeholder="Поиск по точкам…" autocomplete="off">
+        <button class="clear-x" id="nsClear" style="display:none;" aria-label="Очистить">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="dropdown" id="nsDropdown" style="margin-top:-4px;margin-bottom:12px;"></div>
       <div class="nosales-list" id="nosalesList"></div>
     </section>
   </div>
@@ -1002,6 +1009,13 @@
         </div>
         <button class="reset-btn" id="accBackBtn">Сменить менеджера</button>
       </div>
+      <div class="field" style="margin-bottom:12px;">
+        <input type="text" id="accSearch" placeholder="Поиск по точкам…" autocomplete="off">
+        <button class="clear-x" id="accClear" style="display:none;" aria-label="Очистить">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="dropdown" id="accDropdown" style="margin-top:-4px;margin-bottom:12px;"></div>
       <div class="nosales-list" id="accList"></div>
     </section>
   </div>
@@ -1021,6 +1035,13 @@
         </div>
         <button class="reset-btn" id="esdnBackBtn">Сменить менеджера</button>
       </div>
+      <div class="field" style="margin-bottom:12px;">
+        <input type="text" id="esdnSearch" placeholder="Поиск по точкам…" autocomplete="off">
+        <button class="clear-x" id="esdnClear" style="display:none;" aria-label="Очистить">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="dropdown" id="esdnDropdown" style="margin-top:-4px;margin-bottom:12px;"></div>
       <div class="nosales-list" id="esdnList"></div>
     </section>
   </div>
@@ -1156,12 +1177,14 @@
 
   function resetSalesStep(){
     salesState.manager = null;
+    psReset('ns');
     Array.prototype.forEach.call(nsMgrGrid.children, function(c){ c.classList.remove('selected'); });
     document.getElementById('panelNoSales').style.display = 'none';
   }
 
   function selectSalesManager(m, cardEl, silent){
     salesState.manager = m;
+    psReset('ns');
     Array.prototype.forEach.call(nsMgrGrid.children, function(c){ c.classList.remove('selected'); });
     cardEl.classList.add('selected');
     renderNoSalesList(m);
@@ -1207,12 +1230,18 @@
       return a.t.localeCompare(b.t, 'ru');
     });
 
+    var allNoSales = noSales;
+    noSales = psApply('ns', allNoSales); // поиск по точкам
+    if(noSales.length !== allNoSales.length){
+      document.getElementById('nsMeta').textContent = 'найдено ' + noSales.length + ' из ' + allNoSales.length + ' точек без продаж';
+    }
+
     var container = document.getElementById('nosalesList');
     container.innerHTML = '';
     if(!noSales.length){
       var empty = document.createElement('div');
       empty.className = 'mgr-empty';
-      empty.textContent = 'У всех точек этого менеджера есть продажи в текущем месяце.';
+      empty.textContent = allNoSales.length ? 'Ничего не найдено.' : 'У всех точек этого менеджера есть продажи в текущем месяце.';
       container.appendChild(empty);
       return;
     }
@@ -1236,6 +1265,117 @@
   defineKpiView({ key:'esdn', kind:'ЭСДН', gridId:'esdnMgrGrid', hintId:'esdnMgrHint', panelId:'panelEsdnList',
     nameId:'esdnManagerName', metaId:'esdnMeta', listId:'esdnList', planCardId:'esdnPlanCard', backBtnId:'esdnBackBtn',
     emptyMsg:'Данных по разделу «ЭСДН» пока нет.' });
+
+  // ---------- Поиск по точкам (как в «Тёмных силах») для вкладок «Нет продаж», «Аксессуары», «ЭСДН» ----------
+  var PS = {};
+  function psApply(key, list){            // вызывается из рендера списка: запоминает полный список и отдаёт отфильтрованный
+    var st = PS[key];
+    if(!st) return list;
+    st.base = list;
+    return list.filter(st.match);
+  }
+  function psReset(key){ if(PS[key]) PS[key].reset(); }
+
+  function makePointSearch(key, ids, subFn, rerender){
+    var input = document.getElementById(ids.input);
+    var clear = document.getElementById(ids.clear);
+    var dd = document.getElementById(ids.dropdown);
+    if(!input || !clear || !dd) return;
+    var st = { query: '', picked: null, base: [], hl: -1 };
+
+    function norm(e){ return e.t.toLocaleLowerCase('ru'); }
+    st.match = function(e){
+      if(st.picked) return e.t === st.picked;
+      var q = st.query.trim().toLocaleLowerCase('ru');
+      return !q || norm(e).indexOf(q) !== -1;
+    };
+    function closeDd(){ dd.classList.remove('open'); dd.innerHTML = ''; st.hl = -1; }
+    function openDd(){
+      var q = st.query.trim().toLocaleLowerCase('ru');
+      var list = st.base.filter(function(e){ return !q || norm(e).indexOf(q) !== -1; });
+      dd.innerHTML = '';
+      st.hl = -1;
+      if(!list.length){
+        var empty = document.createElement('div');
+        empty.className = 'empty';
+        empty.textContent = st.base.length ? 'Ничего не найдено' : 'Нет точек';
+        dd.appendChild(empty);
+        dd.classList.add('open');
+        return;
+      }
+      list.forEach(function(e){
+        var opt = document.createElement('div');
+        opt.className = 'opt';
+        opt.innerHTML = esc(e.t) + '<span class="sub">' + subFn(e) + '</span>';
+        opt.addEventListener('mousedown', function(ev){ ev.preventDefault(); pick(e); });
+        dd.appendChild(opt);
+      });
+      dd.classList.add('open');
+    }
+    function pick(e){
+      st.picked = e.t; st.query = e.t;
+      input.value = e.t;
+      clear.style.display = 'flex';
+      closeDd();
+      input.blur();
+      rerender();
+    }
+    st.reset = function(){
+      st.query = ''; st.picked = null; st.base = [];
+      input.value = '';
+      clear.style.display = 'none';
+      closeDd();
+    };
+
+    input.addEventListener('input', function(){
+      st.query = input.value;
+      st.picked = null;
+      clear.style.display = st.query ? 'flex' : 'none';
+      rerender();        // обновляет список карточек и st.base
+      openDd();
+    });
+    input.addEventListener('focus', function(){ if(!st.picked && st.base.length) openDd(); });
+    input.addEventListener('blur', function(){ setTimeout(closeDd, 120); });
+    input.addEventListener('keydown', function(ev){
+      var opts = dd.querySelectorAll('.opt');
+      if(!opts.length) return;
+      function paint(){
+        Array.prototype.forEach.call(opts, function(o, i){ o.classList.toggle('hl', i === st.hl); });
+        if(opts[st.hl]) opts[st.hl].scrollIntoView({block:'nearest'});
+      }
+      if(ev.key === 'ArrowDown'){ ev.preventDefault(); st.hl = Math.min(st.hl + 1, opts.length - 1); paint(); }
+      else if(ev.key === 'ArrowUp'){ ev.preventDefault(); st.hl = Math.max(st.hl - 1, 0); paint(); }
+      else if(ev.key === 'Enter'){
+        ev.preventDefault();
+        if(st.hl >= 0 && opts[st.hl]) opts[st.hl].dispatchEvent(new Event('mousedown'));
+        else input.blur();
+      }
+    });
+    clear.addEventListener('click', function(){
+      st.reset();
+      rerender();
+      input.focus();
+    });
+    PS[key] = st;
+  }
+
+  // «Нет продаж за месяц»: в подсказке — сумма за прошлые месяцы
+  makePointSearch('ns', { input:'nsSearch', clear:'nsClear', dropdown:'nsDropdown' },
+    function(e){
+      var prev = e.months.slice(0, -1).reduce(function(a, mo){ return a + (mo.revenue || 0); }, 0);
+      return 'Прошлые месяцы: ' + (prev ? formatMoney(prev) + ' ₽' : '\u2014');
+    },
+    function(){ if(salesState.manager) renderNoSalesList(salesState.manager); });
+
+  // «Аксессуары» и «ЭСДН»: в подсказке — продажи за текущий месяц
+  ['acc', 'esdn'].forEach(function(k){
+    makePointSearch(k, { input:k + 'Search', clear:k + 'Clear', dropdown:k + 'Dropdown' },
+      function(e){
+        var cur = e.months.length ? e.months[e.months.length - 1] : null;
+        return (cur ? monthShort(cur.label) : 'Текущий месяц') + ': ' + (cur && cur.revenue ? formatMoney(cur.revenue) + ' ₽' : '\u2014');
+      },
+      function(){ var v = KPI_VIEWS[k]; if(v && v.state.manager) renderKpiList(k, v.state.manager); });
+  });
 
   function rebuildKpiData(viewKey, list){
     var v = KPI_VIEWS[viewKey];
@@ -1285,6 +1425,7 @@
     var v = KPI_VIEWS[viewKey];
     if(!v) return;
     v.state.manager = null;
+    psReset(viewKey);
     var grid = document.getElementById(v.cfg.gridId);
     Array.prototype.forEach.call(grid.children, function(c){ c.classList.remove('selected'); });
     document.getElementById(v.cfg.panelId).style.display = 'none';
@@ -1293,6 +1434,7 @@
   function selectKpiManager(viewKey, m, cardEl, silent){
     var v = KPI_VIEWS[viewKey];
     v.state.manager = m;
+    psReset(viewKey);
     var grid = document.getElementById(v.cfg.gridId);
     Array.prototype.forEach.call(grid.children, function(c){ c.classList.remove('selected'); });
     cardEl.classList.add('selected');
@@ -1350,14 +1492,18 @@
         '<div class="plan-note">Продажи за месяц: ' + formatMoney(monthTotal) + ' ₽. План пока не установлен.</div>';
     }
 
-    document.getElementById(v.cfg.metaId).textContent = list.length + ' ' + pluralPoints(list.length) + (currentLabel ? ' · продажи за ' + monthShort(currentLabel).toLowerCase() : '');
+    var allList = list;
+    list = psApply(viewKey, allList); // поиск по точкам (план выше считается по всем точкам)
+    document.getElementById(v.cfg.metaId).textContent = list.length !== allList.length
+      ? 'найдено ' + list.length + ' из ' + allList.length
+      : list.length + ' ' + pluralPoints(list.length) + (currentLabel ? ' · продажи за ' + monthShort(currentLabel).toLowerCase() : '');
 
     var container = document.getElementById(v.cfg.listId);
     container.innerHTML = '';
     if(!list.length){
       var empty = document.createElement('div');
       empty.className = 'mgr-empty';
-      empty.textContent = 'Нет точек по этому менеджеру.';
+      empty.textContent = allList.length ? 'Ничего не найдено.' : 'Нет точек по этому менеджеру.';
       container.appendChild(empty);
       return;
     }
