@@ -18,17 +18,49 @@ function sum(arr){ return arr.reduce(function(a, b){ return a + (Number(b) || 0)
 function pct(a, b){ return b > 0 ? Math.round(a / b * 100) : null; }
 function round(n){ return Math.round(Number(n) || 0); }
 function top(arr, n, keyFn){ return arr.slice().sort(function(a, b){ return keyFn(b) - keyFn(a); }).slice(0, n); }
+// Детерминированный генератор по строке: в один день выбор стабилен, на следующий день — другой.
+function seedRng(str){
+  let h = 1779033703 ^ str.length;
+  for(let i = 0; i < str.length; i++){ h = Math.imul(h ^ str.charCodeAt(i), 3432918353); h = (h << 13) | (h >>> 19); }
+  return function(){
+    h = Math.imul(h ^ (h >>> 16), 2246822507);
+    h = Math.imul(h ^ (h >>> 13), 3266489909);
+    return ((h ^= h >>> 16) >>> 0) / 4294967296;
+  };
+}
+// Берёт первые `keep` самых срочных кандидатов и добирает остальные случайно (но по дате) из хвоста списка.
+// Так самое срочное не теряется, а список каждый день разный.
+function pick(list, total, keep, rng){
+  if(list.length <= total) return list;
+  const head = list.slice(0, keep);
+  const rest = list.slice(keep);
+  for(let i = rest.length - 1; i > 0; i--){ const j = Math.floor(rng() * (i + 1)); const t = rest[i]; rest[i] = rest[j]; rest[j] = t; }
+  return head.concat(rest.slice(0, total - keep));
+}
 function names(list){ return SEND_POINT_NAMES ? list : undefined; } // списки с названиями точек — только если разрешено
 
 // Сегодняшняя дата в Самаре и сколько рабочих дней (пн–пт, включая сегодня) осталось до конца месяца.
 function calendar(){
-  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Samara', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()).split('-');
+  const now = process.env.TIPS_DATE ? new Date(process.env.TIPS_DATE + 'T08:00:00Z') : new Date(); // TIPS_DATE — только для проверок
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Samara', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now).split('-');
   const y = +parts[0], m = +parts[1], d = +parts[2];
   const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
   let left = 0;
   for(let day = d; day <= last; day++){ const wd = new Date(Date.UTC(y, m - 1, day)).getUTCDay(); if(wd !== 0 && wd !== 6) left++; }
-  return { date: String(d).padStart(2, '0') + '.' + String(m).padStart(2, '0') + '.' + y, workdaysLeft: Math.max(left, 1) };
+  // номер рабочего дня с 01.01.2026: по нему вращаются тема и ракурс советов
+  let wdIndex = 0;
+  for(let t = Date.UTC(2026, 0, 1); t < Date.UTC(y, m - 1, d); t += 86400000){ const w = new Date(t).getUTCDay(); if(w !== 0 && w !== 6) wdIndex++; }
+  return { date: String(d).padStart(2, '0') + '.' + String(m).padStart(2, '0') + '.' + y, iso: y + '-' + m + '-' + d, wd: wdIndex, workdaysLeft: Math.max(left, 1) };
 }
+
+// Темы дня. Основная и дополнительная меняются каждый рабочий день, ракурс внутри темы — каждую неделю.
+const FOCUS = [
+  { kpi: 'Тёмные силы', angles: ['точки, ближайшие к порогу 90% (быстрые победы)', 'точки с нулевым фактом (запустить продажи)', 'точки с самым крупным планом (наибольший вклад в долю)'] },
+  { kpi: 'Продажи АКБ', angles: ['потерянные точки: покупали в прошлом месяце, в этом нет', 'точки с просадкой более 30%', 'самые активные точки: удержать и нарастить'] },
+  { kpi: 'Незакупленные позиции', angles: ['ходовые позиции, которых нет у проблемных точек', 'позиции, которые не закуплены у большинства точек канала (системный пробел)', 'каналы и точки с самым низким охватом ассортимента'] },
+  { kpi: 'Аксессуары', angles: ['разрыв до плана и дневная норма', 'точки без продаж в этом месяце, которые покупали раньше', 'лучшие точки: как масштабировать успех на остальные'] },
+  { kpi: 'ЭСДН', angles: ['разрыв до плана и дневная норма (только розница)', 'розничные точки без продаж ЭСДН в этом месяце', 'лучшие точки ЭСДН: как масштабировать на остальную розницу'] }
+];
 
 // Бизнес-ограничения для Gemini. Если появятся новые правила («X продаётся только в Y») — добавляйте сюда.
 const BUSINESS_RULES =
@@ -43,6 +75,13 @@ const NO_ROWS = 'в отчёте нет ни одной точки этого м
 function summarize(payload, managerName){
   const cal = calendar();
   const s = { 'Менеджер': managerName, 'Сегодня': cal.date, 'Рабочих дней до конца месяца': cal.workdaysLeft };
+  const rng = seedRng(cal.iso + '|' + managerName);
+  const week = Math.floor(cal.wd / FOCUS.length);
+  const f1 = FOCUS[cal.wd % FOCUS.length], f2 = FOCUS[(cal.wd + 2) % FOCUS.length];
+  s['Фокус дня'] = {
+    'основной показатель': f1.kpi, 'ракурс основного': f1.angles[week % 3],
+    'дополнительный показатель': f2.kpi, 'ракурс дополнительного': f2.angles[(week + 1) % 3]
+  };
 
   // Канал точки: надёжнее всего — из отчётов «Хорека»/«Розница» (там канал задан явно),
   // запасной вариант — текст канала/типа клиента в остальных отчётах.
@@ -74,10 +113,10 @@ function summarize(payload, managerName){
     const n = c.pts.length;
     const miss = {};
     c.pts.forEach(function(e){ Object.keys(e.p).forEach(function(prod){ if(!e.p[prod]) miss[prod] = (miss[prod] || 0) + 1; }); });
-    const topMissing = top(Object.keys(miss), 6, function(p){ return miss[p]; })
+    const topMissing = pick(top(Object.keys(miss), 10, function(p){ return miss[p]; }), 6, 3, rng)
       .map(function(p){ return { 'позиция': p, 'нет в точках': miss[p], 'из': n }; });
     // точки с наибольшим числом незакупленных позиций + ходовые позиции (их берут другие точки канала), которых у них нет
-    const worst = top(c.pts, 6, function(e){ return Object.keys(e.p).filter(function(k){ return !e.p[k]; }).length; })
+    const worst = pick(top(c.pts, 12, function(e){ return Object.keys(e.p).filter(function(k){ return !e.p[k]; }).length; }), 6, 2, rng)
       .map(function(e){
         const lacks = Object.keys(e.p).filter(function(k){ return !e.p[k]; });
         const popular = top(lacks, 3, function(k){ return c.bought[k] || 0; })
@@ -109,11 +148,11 @@ function summarize(payload, managerName){
       'точек без продаж в этом месяце': noSales.length,
       'из них покупали в прошлом месяце': lost.length
     };
-    const l1 = names(top(lost, 8, function(e){ return rev(prev(e)); }).map(function(e){ return { 'точка': e.t, 'прошлый месяц, ₽': round(rev(prev(e))) }; }));
+    const l1 = names(pick(top(lost, 16, function(e){ return rev(prev(e)); }), 8, 2, rng).map(function(e){ return { 'точка': e.t, 'прошлый месяц, ₽': round(rev(prev(e))) }; }));
     if(l1) r['потерянные точки (покупали в прошлом месяце, в этом нет)'] = l1;
-    const l2 = names(top(drops, 5, function(e){ return rev(prev(e)) - rev(cur(e)); }).map(function(e){ return { 'точка': e.t, 'прошлый месяц, ₽': round(rev(prev(e))), 'этот месяц, ₽': round(rev(cur(e))) }; }));
+    const l2 = names(pick(top(drops, 10, function(e){ return rev(prev(e)) - rev(cur(e)); }), 5, 1, rng).map(function(e){ return { 'точка': e.t, 'прошлый месяц, ₽': round(rev(prev(e))), 'этот месяц, ₽': round(rev(cur(e))) }; }));
     if(l2) r['точки с просадкой более 30%'] = l2;
-    const bestA = names(top(sales, 5, function(e){ return rev(cur(e)); }).filter(function(e){ return rev(cur(e)) > 0; }).map(function(e){ return { 'точка': e.t, 'канал': chanOf(e.t) || 'не определён', 'выручка в этом месяце, ₽': round(rev(cur(e))) }; }));
+    const bestA = names(pick(top(sales, 10, function(e){ return rev(cur(e)); }), 5, 1, rng).filter(function(e){ return rev(cur(e)) > 0; }).map(function(e){ return { 'точка': e.t, 'канал': chanOf(e.t) || 'не определён', 'выручка в этом месяце, ₽': round(rev(cur(e))) }; }));
     if(bestA) r['самые активные точки (по выручке в этом месяце)'] = bestA;
     s['Продажи АКБ'] = r;
   }
@@ -145,9 +184,9 @@ function summarize(payload, managerName){
       r['осталось до плана, ₽'] = round(planTotal - fact);
       r['нужно продавать в рабочий день, ₽'] = round((planTotal - fact) / cal.workdaysLeft);
     }
-    const l = names(top(noSales, 8, function(e){ return rev(prev(e)); }).map(function(e){ return { 'точка': e.t, 'прошлый месяц, ₽': round(rev(prev(e))) }; }));
+    const l = names(pick(top(noSales, 16, function(e){ return rev(prev(e)); }), 8, 2, rng).map(function(e){ return { 'точка': e.t, 'прошлый месяц, ₽': round(rev(prev(e))) }; }));
     if(l) r['точки без продаж в этом месяце (список)'] = l;
-    const best = names(top(list, 3, function(e){ return rev(cur(e)); }).filter(function(e){ return rev(cur(e)) > 0; }).map(function(e){ return { 'точка': e.t, 'факт, ₽': round(rev(cur(e))) }; }));
+    const best = names(pick(top(list, 6, function(e){ return rev(cur(e)); }), 3, 1, rng).filter(function(e){ return rev(cur(e)) > 0; }).map(function(e){ return { 'точка': e.t, 'факт, ₽': round(rev(cur(e))) }; }));
     if(best) r['лучшие точки'] = best;
     return r;
   }
@@ -159,7 +198,7 @@ function summarize(payload, managerName){
   if(SEND_POINT_NAMES){
     const sold = new Set((payload.esdn || []).filter(function(e){ const m = e.months[e.months.length - 1]; return m && m.revenue > 0; }).map(function(e){ return e.t; }));
     const lastRev = function(e){ const m = e.months.length ? e.months[e.months.length - 1] : null; return m && m.revenue ? m.revenue : 0; };
-    const cands = top((payload.sales || []).filter(function(e){ return chanOf(e.t) === 'Розница' && lastRev(e) > 0 && !sold.has(e.t); }), 8, lastRev)
+    const cands = pick(top((payload.sales || []).filter(function(e){ return chanOf(e.t) === 'Розница' && lastRev(e) > 0 && !sold.has(e.t); }), 14, lastRev), 8, 2, rng)
       .map(function(e){ return { 'точка': e.t, 'выручка АКБ в этом месяце, ₽': round(lastRev(e)) }; });
     if(cands.length) esdn['розничные точки для предложения ЭСДН'] = cands;
     else esdn['розничные точки для предложения ЭСДН'] = 'не определены — не называй конкретных точек для ЭСДН';
@@ -180,12 +219,16 @@ function summarize(payload, managerName){
       'из них с нулевым фактом': below.filter(function(e){ return !e.fact; }).length
     };
     // ближе всего к порогу — быстрее всего «закрыть» точку
-    const near = names(top(below, 10, dp).map(function(e){
+    const near = names(pick(top(below, 16, dp), 10, 3, rng).map(function(e){
       return { 'точка': e.t, 'выполнение, %': Math.round(dp(e)), 'план': round(e.plan), 'факт': round(e.fact), 'не хватает до 90%': Math.max(1, Math.ceil(e.plan * DARK_THRESHOLD / 100 - (e.fact || 0))) };
     }));
     if(near) r['ближе всего к порогу 90%'] = near;
-    const zero = names(below.filter(function(e){ return !e.fact; }).slice(0, 5).map(function(e){ return { 'точка': e.t, 'план': round(e.plan) }; }));
+    const zero = names(pick(top(below.filter(function(e){ return !e.fact; }), 12, function(e){ return e.plan; }), 5, 1, rng).map(function(e){ return { 'точка': e.t, 'план': round(e.plan) }; }));
     if(zero) r['точки с нулевым фактом'] = zero;
+    const bigPlans = names(pick(top(below, 12, function(e){ return e.plan; }), 6, 2, rng).map(function(e){
+      return { 'точка': e.t, 'выполнение, %': Math.round(dp(e)), 'план': round(e.plan), 'факт': round(e.fact), 'не хватает до 90%': Math.max(1, Math.ceil(e.plan * DARK_THRESHOLD / 100 - (e.fact || 0))) };
+    }));
+    if(bigPlans) r['не дотянули, самые крупные планы'] = bigPlans;
     s['Тёмные силы'] = r;
   }
 
@@ -205,9 +248,9 @@ const PROMPT =
   '3. Называй показатели так, как они называются в отчёте: «Незакупленные позиции», «Продажи АКБ», «Аксессуары», «ЭСДН», «Тёмные силы». ' +
   'Никогда не пиши английские или технические названия (dark, esdn, accessories, sales, plan, fact и т. п.) и не цитируй имена полей.\n' +
   '4. «Тёмные силы» измеряются долей точек, выполнивших план на 90% и выше, а не деньгами; к плану и факту «Тёмных сил» не добавляй «₽». Деньги (₽) — только там, где в сводке стоит «₽».\n' +
-  '5. Приоритет — что быстрее всего даёт результат: сначала точки, близкие к порогу 90% («Тёмные силы»); потерянные точки, которые покупали в прошлом месяце, но не покупают в этом; разрыв до плана по «Аксессуарам» и «ЭСДН» с учётом того, сколько нужно продавать в рабочий день; ходовые позиции, которых нет у точки, хотя их берут другие точки канала.\n' +
+  '5. ФОКУС ДНЯ (раздел «Фокус дня» в сводке — следуй ему): дай 3 совета по основному показателю в заданном ракурсе — каждый про разную точку или позицию — и 1–2 совета по дополнительному в его ракурсе. Остальные показатели упоминай, только если там есть срочная проблема, которой нет у основного и дополнительного показателей. Фокус и ракурс заданы специально, чтобы советы отличались изо дня в день: не подменяй их «самыми очевидными» советами.\n' +
   '6. Учитывай «Рабочих дней до конца месяца»: если дней мало — советуй самые быстрые действия.\n' +
-  '7. Советы — про РАЗНЫЕ показатели, не больше двух на один. Каждый раз подходи свежо: не повторяй шаблонные формулировки, а при равном приоритете называй разные точки и позиции (значение «Вариант» в конце — зерно разнообразия).\n' +
+  '7. Не больше одного совета на точку и на позицию. Кандидаты в списках уже подобраны на сегодня — используй разные точки и позиции из них, а не только первые строки. Формулируй свежо, без шаблонов (значение «Вариант» в конце — зерно разнообразия).\n' +
   '8. Если у показателя в сводке стоит «данные: в отчёте нет ни одной точки… продаж нет» — это не отсутствие информации, а нулевые продажи. Считай факт нулём, а план (если он есть) невыполненным; назови показатель, сумму плана и дневную норму. Конкретные точки называй только если они разрешены ограничениями выше (для ЭСДН — только из списка «розничные точки для предложения ЭСДН»); для остальных показателей можно предложить активные точки из других разделов. Не придумывай причин, почему продаж нет.\n' +
   '9. Тон деловой, на «вы», без воды и мотивационных лозунгов. Текст совета — 2–3 предложения, до 350 символов.\n\n' +
   'ФОРМАТ: строго JSON {"tips":[{"kpi":"название показателя по-русски","title":"суть до 8 слов","text":"совет"}]}';
