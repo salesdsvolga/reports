@@ -25,7 +25,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # --- Шаг 1: проверяем обе почты ---
+  # --- Шаг 1: проверяем обе почты (сначала Gmail, потом Яндекс) ---
   check:
     runs-on: ubuntu-latest
     outputs:
@@ -40,23 +40,6 @@ jobs:
 
       - name: Установить зависимости
         run: npm ci
-
-      - name: Проверить Яндекс.Почту
-        id: check_yandex
-        continue-on-error: true
-        run: |
-          node -e "
-            const { ImapFlow } = require('imapflow');
-            const client = new ImapFlow({
-              host: 'imap.yandex.ru', port: 993, secure: true,
-              auth: { user: process.env.MAIL_USER, pass: process.env.MAIL_PASSWORD }
-            });
-            client.connect().then(() => client.logout()).then(() => process.exit(0))
-              .catch((err) => { console.error('Yandex failed:', err.message); process.exit(1); });
-          "
-        env:
-          MAIL_USER: ${{ secrets.MAIL_USER }}
-          MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
 
       - name: Проверить Gmail
         id: check_gmail
@@ -75,16 +58,33 @@ jobs:
           MAIL_USER: ${{ secrets.GMAIL_USER }}
           MAIL_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
 
+      - name: Проверить Яндекс.Почту
+        id: check_yandex
+        continue-on-error: true
+        run: |
+          node -e "
+            const { ImapFlow } = require('imapflow');
+            const client = new ImapFlow({
+              host: 'imap.yandex.ru', port: 993, secure: true,
+              auth: { user: process.env.MAIL_USER, pass: process.env.MAIL_PASSWORD }
+            });
+            client.connect().then(() => client.logout()).then(() => process.exit(0))
+              .catch((err) => { console.error('Yandex failed:', err.message); process.exit(1); });
+          "
+        env:
+          MAIL_USER: ${{ secrets.MAIL_USER }}
+          MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
+
       - name: Решение — запускать ли ручную сборку
         id: result
         run: |
           if [ "${{ inputs.force }}" = "true" ]; then
             echo "⚙️ Форс-режим: почта игнорируется, ручная сборка будет запущена."
             echo "mail_works=false" >> "$GITHUB_OUTPUT"
-          elif [ "${{ steps.check_yandex.outcome }}" = "success" ] || [ "${{ steps.check_gmail.outcome }}" = "success" ]; then
+          elif [ "${{ steps.check_gmail.outcome }}" = "success" ] || [ "${{ steps.check_yandex.outcome }}" = "success" ]; then
             echo "✅ Хотя бы одна почта работает — ручная сборка НЕ запускается."
-            echo "   Яндекс: ${{ steps.check_yandex.outcome }}"
             echo "   Gmail:  ${{ steps.check_gmail.outcome }}"
+            echo "   Яндекс: ${{ steps.check_yandex.outcome }}"
             echo "   Страницы на сайте не тронуты. Если всё же нужно собрать вручную —"
             echo "   запустите workflow через Run workflow с включённой опцией force."
             echo "mail_works=true" >> "$GITHUB_OUTPUT"
