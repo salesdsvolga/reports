@@ -29,27 +29,9 @@ jobs:
       - name: Установить зависимости
         run: npm ci
 
-      # --- Шаг 1: пробуем собрать из Яндекса ---
-      - name: Попробовать Яндекс
-        id: yandex
-        continue-on-error: true
-        run: node src/build.js --source=mail --encrypt --tips
-        env:
-          MAIL_HOST: 'imap.yandex.ru'
-          MAIL_FOLDER: 'Отчёты'
-          MAIL_USER: ${{ secrets.MAIL_USER }}
-          MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
-          PASSWORDS: ${{ secrets.PASSWORDS }}
-          PLANS_JSON: ${{ vars.PLANS_JSON }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
-
-      # --- Шаг 2: если Яндекс не дал свежих данных — пробуем Gmail ---
-      # Условие: шаг 1 завершился с ошибкой (нет письма, письмо старое,
-      # сервер лежит, папки нет — любая причина).
-      - name: Попробовать Gmail (резерв)
+      # --- Шаг 1: пробуем собрать из Gmail ---
+      - name: Попробовать Gmail
         id: gmail
-        if: steps.yandex.outcome == 'failure'
         continue-on-error: true
         run: node src/build.js --source=mail --encrypt --tips
         env:
@@ -62,14 +44,32 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
 
+      # --- Шаг 2: если Gmail не дал свежих данных — пробуем Яндекс ---
+      # Условие: шаг 1 завершился с ошибкой (нет письма, письмо старое,
+      # сервер лежит, папки нет — любая причина).
+      - name: Попробовать Яндекс (резерв)
+        id: yandex
+        if: steps.gmail.outcome == 'failure'
+        continue-on-error: true
+        run: node src/build.js --source=mail --encrypt --tips
+        env:
+          MAIL_HOST: 'imap.yandex.ru'
+          MAIL_FOLDER: 'Отчёты'
+          MAIL_USER: ${{ secrets.MAIL_USER }}
+          MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
+          PASSWORDS: ${{ secrets.PASSWORDS }}
+          PLANS_JSON: ${{ vars.PLANS_JSON }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+
       # --- Шаг 3: если оба источника не дали данных — валим workflow ---
       - name: Проверить, что сборка удалась
-        if: steps.yandex.outcome == 'failure' && steps.gmail.outcome == 'failure'
+        if: steps.gmail.outcome == 'failure' && steps.yandex.outcome == 'failure'
         run: |
           echo "❌ Обе почты не дали свежих данных."
-          echo "   Яндекс: ${{ steps.yandex.outcome }}"
           echo "   Gmail:  ${{ steps.gmail.outcome }}"
-          echo "Проверьте, отправила ли 1С отчёты, и доходят ли письма до Gmail."
+          echo "   Яндекс: ${{ steps.yandex.outcome }}"
+          echo "Проверьте, отправила ли 1С отчёты, и доходят ли письма до обеих почт."
           exit 1
 
       - uses: actions/configure-pages@v5
