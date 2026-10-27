@@ -115,6 +115,10 @@ async function main(){
     try{ parsed = require('./export').compute(got.exportData, rules, cfg.managers.map(function(m){ return m.name; })); }
     catch(e){ fail('Ошибка расчёта отчётов из выгрузки 1С: ' + e.message); }
     const dark = parsed['Тёмные силы'];
+    ['Хорека', 'Розница'].forEach(function(k){
+      const u = parsed[k].unmapped || [];
+      if(u.length) console.warn((process.env.GITHUB_ACTIONS ? '::warning::' : '  ⚠ ') + 'ММЛ ' + k + ': товары с меткой задачи ММЛ не входят ни в одну позицию rules.json и не учитываются (' + u.length + '): ' + u.slice(0, 15).join('; ') + (u.length > 15 ? '; …' : ''));
+    });
     if(!dark.planFound) console.warn('  ⚠ в 1С не найден реквизит плана «' + dark.planProperty + '» — планы «Тёмных сил» будут нулевыми.');
     cfg.files.forEach(function(d){
       if(!parsed[d.key] || !parsed[d.key].data.length) fail('В выгрузке 1С нет данных для отчёта «' + d.key + '». Проверьте rules.json и менеджеров в config.json.');

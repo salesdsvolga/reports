@@ -73,6 +73,12 @@ function compute(exp, rules, managers){
     posList.forEach(p => p.items.forEach(n => byName.set(n, p.name)));
     const taskVal = r.taskValues[channelKey].id;
     const qty = new Map();
+    const unmapped = new Set();
+    // товары с меткой ММЛ-задачи канала, которых нет ни в одной позиции rules.json (новые/переименованные)
+    exp.items.forEach(it => {
+      const tv = propVal(iProps, it.id, r.taskProperty.id);
+      if(tv && tv.val === taskVal && !it.isGroup && !byName.has(it.name)) unmapped.add(it.name);
+    });
     sales.forEach(s => {
       const d = s.dt.slice(0, 10);
       if(d < r.from || d > r.to) return;
@@ -92,7 +98,7 @@ function compute(exp, rules, managers){
       posList.forEach(pos => { e.p[pos.name] = (qty.get(p.id + '|' + pos.name) || 0) > 0 ? 1 : 0; e.g[pos.name] = pos.group; });
       out.push(e);
     });
-    return { data: sortRows(out), period: ruDate(r.from) + ' - ' + ruDate(r.to) };
+    return { data: sortRows(out), period: ruDate(r.from) + ' - ' + ruDate(r.to), unmapped: Array.from(unmapped).sort() };
   }
 
   // ---------- KPI (продажи по месяцам по группе товаров) ----------
