@@ -34,7 +34,7 @@ jobs:
       - name: Установить зависимости
         run: npm ci
 
-      # --- Советы: журнал (что уже советовали) и Claude Code ---
+      # --- Советы: журнал (что уже советовали) ---
       # Журнал зашифрован паролем выгрузки (EXPORT_PASSWORD) и лежит в релизе tips-state.
       - name: Скачать журнал советов
         continue-on-error: true
@@ -43,15 +43,6 @@ jobs:
           gh release download tips-state --pattern tips-state.enc --dir .tips || echo "Журнала ещё нет — начнём новый."
         env:
           GH_TOKEN: ${{ github.token }}
-
-      # Claude пишет тексты советов по токену подписки (секрет CLAUDE_CODE_OAUTH_TOKEN, команда `claude setup-token`).
-      # Нет секрета — тексты пишет Gemini, нет и его — готовые тексты из кода.
-      - name: Установить Claude Code
-        continue-on-error: true
-        run: |
-          if [ -n "$CLAUDE_CODE_OAUTH_TOKEN" ]; then npm install -g @anthropic-ai/claude-code > /dev/null && claude --version; else echo "CLAUDE_CODE_OAUTH_TOKEN не задан — Claude не используется."; fi
-        env:
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 
       # --- Шаг 1: прямая выгрузка из 1С ---
       # 1С (обработка «Выгрузка для портала») кладёт зашифрованный архив export.zip
@@ -78,8 +69,6 @@ jobs:
           PLANS_JSON: ${{ vars.PLANS_JSON }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL }}
           TIPS_STATE_FILE: .tips/tips-state.enc
           TIPS_STATE_KEY: ${{ secrets.EXPORT_PASSWORD }}
           TIPS_FORCE: ${{ inputs.force_tips && '1' || '' }}
@@ -99,8 +88,6 @@ jobs:
           PLANS_JSON: ${{ vars.PLANS_JSON }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL }}
           TIPS_STATE_FILE: .tips/tips-state.enc
           TIPS_STATE_KEY: ${{ secrets.EXPORT_PASSWORD }}
           TIPS_FORCE: ${{ inputs.force_tips && '1' || '' }}
@@ -120,8 +107,6 @@ jobs:
           PLANS_JSON: ${{ vars.PLANS_JSON }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL }}
           TIPS_STATE_FILE: .tips/tips-state.enc
           TIPS_STATE_KEY: ${{ secrets.EXPORT_PASSWORD }}
           TIPS_FORCE: ${{ inputs.force_tips && '1' || '' }}
