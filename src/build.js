@@ -4,7 +4,7 @@
 //   добавьте --tips, чтобы получить советы от Gemini (нужен GEMINI_API_KEY; без флага Gemini не вызывается)
 //   node src/build.js --source=dir:samples        (проверка на файлах из папки, без почты)
 //   node src/build.js --source=eml:letter.eml     (проверка на сохранённом письме)
-//   node src/build.js --source=export:work/export.json   (прямая выгрузка из 1С, правила отчётов — rules.json)
+//   node src/build.js --source=export:work/export.json   (прямая выгрузка из 1С; правила — из настроек отчётов рассылки «123» в 1С)
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
@@ -111,17 +111,16 @@ async function main(){
   // 2. найти, разобрать, проверить
   let parsed;
   if(got.exportData){
-    const rules = readJson(path.join(ROOT, 'rules.json'));
-    try{ parsed = require('./export').compute(got.exportData, rules, cfg.managers.map(function(m){ return m.name; })); }
+    try{ parsed = require('./export').compute(got.exportData, cfg, cfg.managers.map(function(m){ return m.name; })); }
     catch(e){ fail('Ошибка расчёта отчётов из выгрузки 1С: ' + e.message); }
     const dark = parsed['Тёмные силы'];
     ['Хорека', 'Розница'].forEach(function(k){
       const u = parsed[k].unmapped || [];
-      if(u.length) console.warn((process.env.GITHUB_ACTIONS ? '::warning::' : '  ⚠ ') + 'ММЛ ' + k + ': товары с меткой задачи ММЛ не входят ни в одну позицию rules.json и не учитываются (' + u.length + '): ' + u.slice(0, 15).join('; ') + (u.length > 15 ? '; …' : ''));
+      if(u.length) console.warn((process.env.GITHUB_ACTIONS ? '::warning::' : '  ⚠ ') + 'ММЛ ' + k + ': товары проходят отбор отчёта «' + parsed[k].reportName + '», но не попали ни в одну позицию поля «Выбор» и не учитываются (' + u.length + '): ' + u.slice(0, 15).join('; ') + (u.length > 15 ? '; …' : ''));
     });
     if(!dark.planFound) console.warn('  ⚠ в 1С не найден реквизит плана «' + dark.planProperty + '» — планы «Тёмных сил» будут нулевыми.');
     cfg.files.forEach(function(d){
-      if(!parsed[d.key] || !parsed[d.key].data.length) fail('В выгрузке 1С нет данных для отчёта «' + d.key + '». Проверьте rules.json и менеджеров в config.json.');
+      if(!parsed[d.key] || !parsed[d.key].data.length) fail('В выгрузке 1С нет данных для отчёта «' + d.key + '». Проверьте отборы этого отчёта в рассылке «123» и менеджеров в config.json.');
     });
   } else {
     const ident = reports.identify(got.files, cfg);
@@ -136,7 +135,7 @@ async function main(){
   console.log((got.exportData ? 'Выгрузка 1С от: ' : 'Письмо от: ') + generatedAt + ' (' + cfg.timezone + ')');
   cfg.files.forEach(function(d){
     const p = parsed[d.key];
-    console.log('  ' + d.key.padEnd(22) + String(p.data.length).padStart(4) + ' строк · период ' + p.period);
+    console.log('  ' + d.key.padEnd(22) + String(p.data.length).padStart(4) + ' строк · период ' + p.period + (p.reportName ? ' · отчёт 1С «' + p.reportName.trim() + '»' : ''));
   });
 
   // 3. страницы
