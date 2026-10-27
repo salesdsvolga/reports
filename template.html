@@ -1994,7 +1994,7 @@
     document.addEventListener('click', function(e){ if(!panel.hidden && !panel.contains(e.target)) setOpen(false); });
     document.addEventListener('keydown', function(e){ if(e.key === 'Escape') setOpen(false); });
   })();
-  // «Советы» — готовятся при сборке (Gemini); если советов нет, кнопка скрыта
+  // «Советы» — готовятся при сборке (поводы считает код, текст пишет Claude/Gemini); если советов нет, кнопка скрыта
   (function(){
     var btn = document.getElementById('tipsBtn');
     var panel = document.getElementById('tipsPanel');

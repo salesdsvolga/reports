@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Сборка страниц для менеджеров.
 //   node src/build.js --source=mail --encrypt     (так работает GitHub Actions)
-//   добавьте --tips, чтобы получить советы от Gemini (нужен GEMINI_API_KEY; без флага Gemini не вызывается)
+//   добавьте --tips, чтобы получить советы (см. src/tips.js; без флага модели не вызываются)
 //   node src/build.js --source=dir:samples        (проверка на файлах из папки, без почты)
 //   node src/build.js --source=eml:letter.eml     (проверка на сохранённом письме)
 //   node src/build.js --source=export:work/export.json   (прямая выгрузка из 1С; правила — из настроек отчётов рассылки «123» в 1С)
@@ -170,7 +170,8 @@ async function main(){
   }
   if(!pages.length) fail('Ни одной страницы не получилось собрать.');
 
-  if(args.tips) await require('./tips').addTips(pages, process.env); // только автосборка; ручная сборка флаг не передаёт
+  // только автосборка; ручная сборка флаг не передаёт. Сырые продажи 1С нужны для поводов «пора заказывать» и т. п.
+  if(args.tips) await require('./tips').addTips(pages, process.env, { exp: got.exportData || null });
 
   pages.forEach(function(p){
     fs.writeFileSync(path.join(WORK, 'plain', p.slug + '.html'), renderPage(template, p.payload, p.title));
