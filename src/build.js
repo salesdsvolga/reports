@@ -4,6 +4,7 @@
 //   добавьте --tips, чтобы получить советы от Gemini (нужен GEMINI_API_KEY; без флага Gemini не вызывается)
 //   node src/build.js --source=dir:samples        (проверка на файлах из папки, без почты)
 //   node src/build.js --source=eml:letter.eml     (проверка на сохранённом письме)
+//   node src/build.js --source=export:work/export.json   (прямая выгрузка из 1С, правила отчётов — rules.json)
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
@@ -95,18 +96,44 @@ async function main(){
     got = { files: fs.readdirSync(dir).map(function(n){ return { filename: n, content: fs.readFileSync(path.join(dir, n)) }; }), date: new Date() };
   } else if(source.indexOf('eml:') === 0){
     got = await mail.readEml(fs.readFileSync(path.resolve(ROOT, source.slice(4))));
+  } else if(source.indexOf('export:') === 0){
+    // прямая выгрузка из 1С (обработка/расширение «Выгрузка для портала»), без Excel
+    const exp = readJson(path.resolve(ROOT, source.slice(7)));
+    // время выгрузки 1С пишет без часового пояса — это время сервера 1С (Самара, UTC+4)
+    const created = new Date(String(exp.createdAt) + (cfg.exportUtcOffset || '+04:00'));
+    if(isNaN(created.getTime())) fail('В выгрузке 1С нет даты (createdAt).');
+    const maxAge = Number(args['max-age'] || (cfg.mail && cfg.mail.maxAgeHours) || 30);
+    const ageH = (Date.now() - created.getTime()) / 3600000;
+    if(ageH > maxAge) fail('Выгрузка 1С старая: ' + exp.createdAt + ' (' + Math.round(ageH) + ' ч назад, лимит ' + maxAge + ' ч). Проверьте регламентное задание в 1С.');
+    got = { exportData: exp, date: created };
   } else fail('Неизвестный --source: ' + source);
 
   // 2. найти, разобрать, проверить
-  const ident = reports.identify(got.files, cfg);
-  const parsed = reports.parseAll(ident.found, cfg);
+  let parsed;
+  if(got.exportData){
+    const rules = readJson(path.join(ROOT, 'rules.json'));
+    try{ parsed = require('./export').compute(got.exportData, rules, cfg.managers.map(function(m){ return m.name; })); }
+    catch(e){ fail('Ошибка расчёта отчётов из выгрузки 1С: ' + e.message); }
+    const dark = parsed['Тёмные силы'];
+    ['Хорека', 'Розница'].forEach(function(k){
+      const u = parsed[k].unmapped || [];
+      if(u.length) console.warn((process.env.GITHUB_ACTIONS ? '::warning::' : '  ⚠ ') + 'ММЛ ' + k + ': товары с меткой задачи ММЛ не входят ни в одну позицию rules.json и не учитываются (' + u.length + '): ' + u.slice(0, 15).join('; ') + (u.length > 15 ? '; …' : ''));
+    });
+    if(!dark.planFound) console.warn('  ⚠ в 1С не найден реквизит плана «' + dark.planProperty + '» — планы «Тёмных сил» будут нулевыми.');
+    cfg.files.forEach(function(d){
+      if(!parsed[d.key] || !parsed[d.key].data.length) fail('В выгрузке 1С нет данных для отчёта «' + d.key + '». Проверьте rules.json и менеджеров в config.json.');
+    });
+  } else {
+    const ident = reports.identify(got.files, cfg);
+    parsed = reports.parseAll(ident.found, cfg);
+    if(ident.skipped.length) console.log('Пропущены лишние вложения: ' + ident.skipped.join(', '));
+  }
   reports.checkPeriods(parsed);
-  if(ident.skipped.length) console.log('Пропущены лишние вложения: ' + ident.skipped.join(', '));
 
   const generatedAt = formatDate(got.date, cfg.timezone);
   const all = reports.assemble(parsed, generatedAt);
 
-  console.log('Письмо от: ' + generatedAt + ' (' + cfg.timezone + ')');
+  console.log((got.exportData ? 'Выгрузка 1С от: ' : 'Письмо от: ') + generatedAt + ' (' + cfg.timezone + ')');
   cfg.files.forEach(function(d){
     const p = parsed[d.key];
     console.log('  ' + d.key.padEnd(22) + String(p.data.length).padStart(4) + ' строк · период ' + p.period);
