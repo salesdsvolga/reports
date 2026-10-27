@@ -4,7 +4,7 @@ on:
   schedule:
     # Время по UTC. Самара = UTC+4, поэтому 06:15 UTC = 10:15 в Самаре.
     - cron: '15 6 * * 1-5'   # 10:15 Самара, Пн–Пт
-  workflow_dispatch:          # кнопка «Run workflow» для ручного запуска
+  workflow_dispatch:          # кнопка «Run workflow»; так же workflow запускает 1С после выгрузки
 
 permissions:
   contents: read
@@ -29,9 +29,36 @@ jobs:
       - name: Установить зависимости
         run: npm ci
 
-      # --- Шаг 1: пробуем собрать из Gmail ---
+      # --- Шаг 1: прямая выгрузка из 1С ---
+      # 1С (обработка «Выгрузка для портала») кладёт зашифрованный архив export.zip
+      # в релиз data-export этого репозитория. Пароль архива — секрет EXPORT_PASSWORD.
+      - name: Скачать выгрузку 1С
+        id: export_dl
+        continue-on-error: true
+        run: |
+          rm -rf .export && mkdir -p .export
+          gh release download data-export --pattern export.zip --dir .export
+          7z x -y -p"$EXPORT_PASSWORD" -o.export .export/export.zip > /dev/null
+          test -s .export/export.json
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPORT_PASSWORD: ${{ secrets.EXPORT_PASSWORD }}
+
+      - name: Собрать из выгрузки 1С
+        id: export
+        if: steps.export_dl.outcome == 'success'
+        continue-on-error: true
+        run: node src/build.js --source=export:.export/export.json --encrypt --tips
+        env:
+          PASSWORDS: ${{ secrets.PASSWORDS }}
+          PLANS_JSON: ${{ vars.PLANS_JSON }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+
+      # --- Шаг 2 (резерв): письмо 1С в Gmail ---
       - name: Попробовать Gmail
         id: gmail
+        if: steps.export.outcome != 'success'
         continue-on-error: true
         run: node src/build.js --source=mail --encrypt --tips
         env:
@@ -44,12 +71,10 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
 
-      # --- Шаг 2: если Gmail не дал свежих данных — пробуем Яндекс ---
-      # Условие: шаг 1 завершился с ошибкой (нет письма, письмо старое,
-      # сервер лежит, папки нет — любая причина).
+      # --- Шаг 3 (резерв): если и Gmail не дал свежих данных — Яндекс ---
       - name: Попробовать Яндекс (резерв)
         id: yandex
-        if: steps.gmail.outcome == 'failure'
+        if: steps.export.outcome != 'success' && steps.gmail.outcome == 'failure'
         continue-on-error: true
         run: node src/build.js --source=mail --encrypt --tips
         env:
@@ -62,15 +87,20 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
 
-      # --- Шаг 3: если оба источника не дали данных — валим workflow ---
+      # --- Шаг 4: если ни один источник не дал данных — валим workflow ---
       - name: Проверить, что сборка удалась
-        if: steps.gmail.outcome == 'failure' && steps.yandex.outcome == 'failure'
+        if: steps.export.outcome != 'success' && steps.gmail.outcome == 'failure' && steps.yandex.outcome == 'failure'
         run: |
-          echo "❌ Обе почты не дали свежих данных."
-          echo "   Gmail:  ${{ steps.gmail.outcome }}"
-          echo "   Яндекс: ${{ steps.yandex.outcome }}"
-          echo "Проверьте, отправила ли 1С отчёты, и доходят ли письма до обеих почт."
+          echo "❌ Ни один источник не дал свежих данных."
+          echo "   Выгрузка 1С: ${{ steps.export_dl.outcome }} / ${{ steps.export.outcome }}"
+          echo "   Gmail:       ${{ steps.gmail.outcome }}"
+          echo "   Яндекс:      ${{ steps.yandex.outcome }}"
+          echo "Проверьте регламентное задание выгрузки в 1С и письма рассылки «123»."
           exit 1
+
+      - name: Источник данных
+        run: |
+          if [ "${{ steps.export.outcome }}" = "success" ]; then echo "✅ Отчёты собраны из прямой выгрузки 1С."; else echo "↩️ Отчёты собраны из письма (резерв)."; fi
 
       - uses: actions/configure-pages@v5
 
