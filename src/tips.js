@@ -5,8 +5,8 @@
 //  1. reasons.js находит поводы (кто, что, сколько) — все цифры считает код.
 //  2. Здесь выбираются 6 поводов на менеджера: разные типы, не больше одного на точку,
 //     без повторов того, что уже советовали в последние дни (журнал).
-//  3. Модель только пишет текст по поводам: Claude (токен подписки, CLAUDE_CODE_OAUTH_TOKEN) →
-//     Gemini (GEMINI_API_KEY) → готовый текст из кода. Советы есть всегда.
+//  3. Модель только пишет текст по поводам: Gemini (GEMINI_API_KEY, модель — переменная GEMINI_MODEL),
+//     при сбое — готовый текст из кода. Советы есть всегда.
 //  4. Советы готовятся один раз в день; остальные сборки дня берут их из журнала.
 //
 // Журнал хранится зашифрованным (TIPS_STATE_KEY) в файле, который workflow скачивает из релиза
@@ -16,10 +16,8 @@
 'use strict';
 
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
-const { spawn } = require('child_process');
 const reasons = require('./reasons');
 
 const TIPS_PER_MANAGER = 6;
@@ -27,8 +25,6 @@ const KEY_COOLDOWN_DAYS = 10;    // тот же повод по той же то
 const MIN_KEY_COOLDOWN_DAYS = 5; // …но если новых поводов не хватает — можно повторить через 5 дней
 const POINT_COOLDOWN_DAYS = 4;   // одна точка (любой повод) — не чаще раза в 4 дня
 const HISTORY_DAYS = 45;
-const CLAUDE_MODEL = 'sonnet';
-const CLAUDE_TIMEOUT_MS = 240000;
 const GEMINI_MODEL = 'gemini-flash-latest';
 const GEMINI_FALLBACK = 'gemini-flash-lite-latest';
 const GEMINI_RETRY_MS = [4000, 12000];
@@ -146,9 +142,9 @@ const SYSTEM =
   '7. title — суть до 7 слов, без названия показателя. text — не больше 3 предложений и 330 знаков: менеджер читает с телефона.\n\n' +
   'Ответь ТОЛЬКО JSON без пояснений: {"tips":[{"id":"…","title":"…","text":"…"}]}';
 
-// формат ответа: Claude Code проверяет его сам (--json-schema), так что сломанный JSON не придёт
-const SCHEMA = { type: 'object', required: ['tips'], properties: { tips: { type: 'array', items: { type: 'object', required: ['id', 'title', 'text'],
-  properties: { id: { type: 'string' }, title: { type: 'string' }, text: { type: 'string' } } } } } };
+// формат ответа: Gemini проверяет его сам (responseSchema), так что сломанный JSON не придёт
+const SCHEMA = { type: 'OBJECT', required: ['tips'], properties: { tips: { type: 'ARRAY', items: { type: 'OBJECT', required: ['id', 'title', 'text'],
+  properties: { id: { type: 'STRING' }, title: { type: 'STRING' }, text: { type: 'STRING' } } } } } };
 
 function buildPrompt(batch, cal){
   return JSON.stringify({
@@ -170,40 +166,7 @@ function parseTips(text){
   return map;
 }
 
-function callClaude(prompt, env){
-  return new Promise(function(resolve, reject){
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tips-')); // пустая папка: Claude не видит репозиторий
-    const args = ['-p', '--model', env.CLAUDE_MODEL || CLAUDE_MODEL, '--tools', '', '--system-prompt', SYSTEM,
-      '--output-format', 'json', '--no-session-persistence', '--strict-mcp-config', '--json-schema', JSON.stringify(SCHEMA)];
-    const childEnv = Object.assign({}, process.env);
-    ['ANTHROPIC_API_KEY', 'GEMINI_API_KEY', 'EXPORT_PASSWORD', 'TIPS_STATE_KEY', 'PASSWORDS', 'MAIL_PASSWORD', 'GMAIL_APP_PASSWORD'].forEach(function(k){ delete childEnv[k]; });
-    let child;
-    try{ child = spawn(env.CLAUDE_BIN || 'claude', args, { cwd: dir, env: childEnv, stdio: ['pipe', 'pipe', 'pipe'] }); }
-    catch(e){ return reject(e); }
-    let out = '', err = '';
-    const timer = setTimeout(function(){ child.kill('SIGKILL'); }, CLAUDE_TIMEOUT_MS);
-    child.stdout.on('data', function(d){ out += d; });
-    child.stderr.on('data', function(d){ err += d; });
-    child.on('error', function(e){ clearTimeout(timer); reject(e.code === 'ENOENT' ? new Error('Claude Code не установлен') : e); });
-    child.on('close', function(code){
-      clearTimeout(timer);
-      fs.rmSync(dir, { recursive: true, force: true });
-      try{
-        const j = JSON.parse(out);
-        if(j.is_error) return reject(new Error('Claude: ' + String(j.result || j.subtype || 'ошибка').slice(0, 200)));
-        const u = j.usage || {};
-        console.log('  ℹ Claude: токенов — вход ' + ((u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0)) + ', выход ' + (u.output_tokens || 0));
-        try{ resolve(parseTips(j.structured_output ? JSON.stringify(j.structured_output) : j.result)); }
-        catch(e2){ reject(new Error('ответ не разобран (' + e2.message + ')' + (process.env.TIPS_DEBUG ? ': ' + j.result : ''))); }
-      }catch(e){
-        reject(new Error('Claude: код ' + code + ', ' + (err || out || e.message).replace(/\s+/g, ' ').slice(0, 200)));
-      }
-    });
-    child.stdin.end(prompt);
-  });
-}
-
-async function callGemini(prompt, env, model){
+async function callGemini(prompt, env, model, noSchema){
   const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent';
   const ctrl = new AbortController();
   const timer = setTimeout(function(){ ctrl.abort(); }, GEMINI_TIMEOUT_MS);
@@ -214,7 +177,7 @@ async function callGemini(prompt, env, model){
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: SYSTEM }] },
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { responseMimeType: 'application/json', temperature: 0.7 }
+        generationConfig: Object.assign({ responseMimeType: 'application/json', temperature: 0.7 }, noSchema ? {} : { responseSchema: SCHEMA })
       }),
       signal: ctrl.signal
     });
@@ -233,6 +196,8 @@ async function callGeminiRetry(prompt, env){
       try{ return await callGemini(prompt, env, model); }
       catch(e){
         last = e;
+        // модель не приняла схему ответа — пробуем без неё (JSON всё равно разбирается)
+        if(e.status === 400){ try{ return await callGemini(prompt, env, model, true); } catch(e2){ last = e2; } }
         if(e.status && e.status !== 429 && e.status < 500) break;
         if(i < GEMINI_RETRY_MS.length) await new Promise(function(r){ setTimeout(r, GEMINI_RETRY_MS[i]); });
       }
@@ -244,7 +209,6 @@ async function callGeminiRetry(prompt, env){
 async function write(batch, cal, env){
   const prompt = buildPrompt(batch, cal);
   const writers = [];
-  if(env.CLAUDE_CODE_OAUTH_TOKEN) writers.push(['Claude', function(){ return callClaude(prompt, env); }]);
   if(env.GEMINI_API_KEY) writers.push(['Gemini', function(){ return callGeminiRetry(prompt, env); }]);
   let map = new Map(), by = 'шаблоны';
   for(const w of writers){
