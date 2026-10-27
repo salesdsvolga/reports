@@ -5,9 +5,14 @@ on:
     # Время по UTC. Самара = UTC+4, поэтому 06:15 UTC = 10:15 в Самаре.
     - cron: '15 6 * * 1-5'   # 10:15 Самара, Пн–Пт
   workflow_dispatch:          # кнопка «Run workflow»; так же workflow запускает 1С после выгрузки
+    inputs:
+      force_tips:
+        description: 'Пересоздать сегодняшние советы (обычно они готовятся раз в день)'
+        type: boolean
+        default: false
 
 permissions:
-  contents: read
+  contents: write   # журнал советов хранится в релизе tips-state
   pages: write
   id-token: write
 
@@ -28,6 +33,25 @@ jobs:
 
       - name: Установить зависимости
         run: npm ci
+
+      # --- Советы: журнал (что уже советовали) и Claude Code ---
+      # Журнал зашифрован паролем выгрузки (EXPORT_PASSWORD) и лежит в релизе tips-state.
+      - name: Скачать журнал советов
+        continue-on-error: true
+        run: |
+          mkdir -p .tips
+          gh release download tips-state --pattern tips-state.enc --dir .tips || echo "Журнала ещё нет — начнём новый."
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      # Claude пишет тексты советов по токену подписки (секрет CLAUDE_CODE_OAUTH_TOKEN, команда `claude setup-token`).
+      # Нет секрета — тексты пишет Gemini, нет и его — готовые тексты из кода.
+      - name: Установить Claude Code
+        continue-on-error: true
+        run: |
+          if [ -n "$CLAUDE_CODE_OAUTH_TOKEN" ]; then npm install -g @anthropic-ai/claude-code > /dev/null && claude --version; else echo "CLAUDE_CODE_OAUTH_TOKEN не задан — Claude не используется."; fi
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 
       # --- Шаг 1: прямая выгрузка из 1С ---
       # 1С (обработка «Выгрузка для портала») кладёт зашифрованный архив export.zip
@@ -54,6 +78,11 @@ jobs:
           PLANS_JSON: ${{ vars.PLANS_JSON }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL }}
+          TIPS_STATE_FILE: .tips/tips-state.enc
+          TIPS_STATE_KEY: ${{ secrets.EXPORT_PASSWORD }}
+          TIPS_FORCE: ${{ inputs.force_tips && '1' || '' }}
 
       # --- Шаг 2 (резерв): письмо 1С в Gmail ---
       - name: Попробовать Gmail
@@ -70,6 +99,11 @@ jobs:
           PLANS_JSON: ${{ vars.PLANS_JSON }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL }}
+          TIPS_STATE_FILE: .tips/tips-state.enc
+          TIPS_STATE_KEY: ${{ secrets.EXPORT_PASSWORD }}
+          TIPS_FORCE: ${{ inputs.force_tips && '1' || '' }}
 
       # --- Шаг 3 (резерв): если и Gmail не дал свежих данных — Яндекс ---
       - name: Попробовать Яндекс (резерв)
@@ -86,6 +120,11 @@ jobs:
           PLANS_JSON: ${{ vars.PLANS_JSON }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL }}
+          TIPS_STATE_FILE: .tips/tips-state.enc
+          TIPS_STATE_KEY: ${{ secrets.EXPORT_PASSWORD }}
+          TIPS_FORCE: ${{ inputs.force_tips && '1' || '' }}
 
       # --- Шаг 4: если ни один источник не дал данных — валим workflow ---
       - name: Проверить, что сборка удалась
@@ -97,6 +136,15 @@ jobs:
           echo "   Яндекс:      ${{ steps.yandex.outcome }}"
           echo "Проверьте регламентное задание выгрузки в 1С и письма рассылки «123»."
           exit 1
+
+      - name: Сохранить журнал советов
+        continue-on-error: true
+        run: |
+          [ -f .tips/tips-state.enc ] || { echo "Журнал не создавался."; exit 0; }
+          gh release view tips-state > /dev/null 2>&1 || gh release create tips-state --title "Журнал советов" --notes "Служебный файл: какие советы уже показывали (зашифрован). Не удалять." --latest=false
+          gh release upload tips-state .tips/tips-state.enc --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - name: Источник данных
         run: |
