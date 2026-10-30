@@ -487,6 +487,78 @@
   }
   .dark-card .dark-bar i.full{ background: var(--hit); }
 
+  /* План по табаку: сверху на всех вкладках; прячется при прокрутке вниз, возвращается при прокрутке вверх */
+  .tob{
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    background: var(--bg);
+    border-bottom: 1px solid var(--line);
+    transition: transform .25s ease;
+    will-change: transform;
+  }
+  .tob[hidden]{ display:none; }
+  .tob.tob-hide{ transform: translateY(-100%); }
+  .tob-inner{
+    max-width: 560px;
+    margin: 0 auto;
+    padding: calc(9px + env(safe-area-inset-top, 0px)) 18px 10px;
+  }
+  .tob-row + .tob-row{ margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+  .tob-top{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    gap:10px;
+    margin-bottom:6px;
+  }
+  .tob-name{
+    font-family:'Uni Sans','Montserrat',Arial,sans-serif;
+    font-weight:700;
+    font-size:13px;
+    color: var(--ink);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .tob-name small{
+    font-family:'Circe','Manrope',Arial,sans-serif;
+    font-weight:500;
+    font-size:11.5px;
+    color: var(--ink-faint);
+    margin-left: 6px;
+  }
+  .tob-pct{
+    font-family:'Uni Sans','Montserrat',Arial,sans-serif;
+    font-weight:700;
+    font-size:17px;
+    line-height:1;
+    flex-shrink:0;
+  }
+  .tob-pct.ok{ color: var(--hit); }
+  .tob-pct.low{ color: var(--miss); }
+  .tob-bar{
+    height:7px;
+    border-radius:99px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    overflow:hidden;
+  }
+  .tob-bar i{
+    display:block;
+    height:100%;
+    background: var(--amber);
+    border-radius:99px;
+  }
+  .tob-bar i.full{ background: var(--hit); }
+  .tob-note{
+    margin-top:6px;
+    font-size:11.5px;
+    color: var(--ink-dim);
+    font-variant-numeric: tabular-nums;
+  }
+  .tob-note b{ font-weight:600; color: var(--ink); }
+
   /* KPI-вкладки: карточка плана и поля планов в админке */
   .plan-card{
     background: var(--panel-2);
@@ -862,6 +934,7 @@
 </style>
 </head>
 <body>
+<div class="tob" id="tobBar" hidden><div class="tob-inner" id="tobInner"></div></div>
 <div class="wrap">
 
   <header class="top">
@@ -2291,6 +2364,60 @@
   rebuildKpiData('esdn', ESDN_DATA);
   rebuildDarkData(DARK_DATA);
   renderPeriodBadge();
+  renderTobaccoBar();
+
+  // ---------- план по табаку (сверху, на всех вкладках) ----------
+  // Факт — все продажи табака менеджера за текущий месяц (отчёт «KPI - АКБ табак»),
+  // план — plans.json → «Табак» (на странице менеджера — число, на общей — по менеджерам).
+  function renderTobaccoBar(){
+    var bar = document.getElementById('tobBar');
+    var p = PLANS['Табак'];
+    var names = salesManagers.slice();
+    if(p && typeof p === 'object'){
+      Object.keys(p).forEach(function(n){ if(names.indexOf(n) < 0) names.push(n); });
+    }
+    if(!names.length){ bar.hidden = true; return; }
+    var monthLabel = '';
+    var rows = names.map(function(m){
+      var fact = 0;
+      (salesByManager[m] || []).forEach(function(e){
+        var cur = e.months.length ? e.months[e.months.length-1] : null;
+        if(cur){ fact += cur.revenue || 0; if(!monthLabel) monthLabel = cur.label; }
+      });
+      return { m: m, fact: fact, plan: planFor('Табак', m) };
+    });
+    var month = monthShort(monthLabel).toLowerCase();
+    document.getElementById('tobInner').innerHTML = rows.map(function(r){
+      var head = '<span class="tob-name">' + esc(shortName(r.m)) + '<small>табак' + (month ? ', ' + esc(month) : '') + '</small></span>';
+      if(r.plan > 0){
+        var pct = Math.round(r.fact / r.plan * 100);
+        var cls = pct >= 100 ? 'ok' : (pct < 50 ? 'low' : '');
+        return '<div class="tob-row"><div class="tob-top">' + head + '<span class="tob-pct ' + cls + '">' + pct + '%</span></div>' +
+          '<div class="tob-bar"><i class="' + (pct >= 100 ? 'full' : '') + '" style="width:' + Math.max(0, Math.min(100, pct)) + '%"></i></div>' +
+          '<div class="tob-note">План <b>' + formatMoney(r.plan) + ' ₽</b> / факт <b>' + formatMoney(r.fact) + ' ₽</b></div></div>';
+      }
+      return '<div class="tob-row"><div class="tob-top">' + head + '<span class="tob-pct">—</span></div>' +
+        '<div class="tob-note">Факт <b>' + formatMoney(r.fact) + ' ₽</b> · план не задан</div></div>';
+    }).join('');
+    bar.hidden = false;
+  }
+
+  (function tobaccoBarScroll(){
+    var bar = document.getElementById('tobBar');
+    if(bar.hidden) return;
+    var lastY = window.pageYOffset || 0, ticking = false;
+    function update(){
+      ticking = false;
+      var y = Math.max(0, window.pageYOffset || document.documentElement.scrollTop || 0);
+      var dy = y - lastY;
+      if(y <= bar.offsetHeight){ bar.classList.remove('tob-hide'); lastY = y; return; }
+      if(dy > 6){ bar.classList.add('tob-hide'); lastY = y; }
+      else if(dy < -6){ bar.classList.remove('tob-hide'); lastY = y; }
+    }
+    window.addEventListener('scroll', function(){
+      if(!ticking){ ticking = true; window.requestAnimationFrame(update); }
+    }, { passive: true });
+  })();
 
   // ---------- файл менеджера: выбор менеджера не нужен ----------
   // Если в файле один менеджер, выбираем его
