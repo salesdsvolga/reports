@@ -487,24 +487,10 @@
   }
   .dark-card .dark-bar i.full{ background: var(--hit); }
 
-  /* План по табаку: сверху на всех вкладках; прячется при прокрутке вниз, возвращается при прокрутке вверх */
-  .tob{
-    position: sticky;
-    top: 0;
-    z-index: 40;
-    background: var(--bg);
-    border-bottom: 1px solid var(--line);
-    transition: transform .25s ease;
-    will-change: transform;
-  }
+  /* План по табаку: под логотипом на всех вкладках */
+  .tob{ margin: -6px 2px 18px; }
   .tob[hidden]{ display:none; }
-  .tob.tob-hide{ transform: translateY(-100%); }
-  .tob-inner{
-    max-width: 560px;
-    margin: 0 auto;
-    padding: calc(9px + env(safe-area-inset-top, 0px)) 18px 10px;
-  }
-  .tob-row + .tob-row{ margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+  .tob-row + .tob-row{ margin-top: 14px; }
   .tob-top{
     display:flex;
     align-items:baseline;
@@ -512,6 +498,7 @@
     gap:10px;
     margin-bottom:6px;
   }
+  .tob-lbl{ font-size:11.5px; color: var(--ink-faint); }
   .tob-name{
     font-family:'Uni Sans','Montserrat',Arial,sans-serif;
     font-weight:700;
@@ -540,10 +527,10 @@
   .tob-bar{
     height:7px;
     border-radius:99px;
-    background: var(--panel);
-    border: 1px solid var(--line);
+    background: var(--panel-2);
     overflow:hidden;
   }
+  :root[data-theme="light"] .tob-bar{ background: var(--line); }
   .tob-bar i{
     display:block;
     height:100%;
@@ -934,7 +921,6 @@
 </style>
 </head>
 <body>
-<div class="tob" id="tobBar" hidden><div class="tob-inner" id="tobInner"></div></div>
 <div class="wrap">
 
   <header class="top">
@@ -956,6 +942,8 @@
     <div class="periods-panel" id="periodsPanel" hidden></div>
     <div class="periods-panel tips-panel" id="tipsPanel" hidden></div>
   </header>
+
+  <div class="tob" id="tobBar" hidden></div>
 
   <div class="view-tabs" id="viewTabs">
     <button class="view-tab active" data-view="positions" type="button">Незакупленные позиции</button>
@@ -2387,8 +2375,12 @@
       return { m: m, fact: fact, plan: planFor('Табак', m) };
     });
     var month = monthShort(monthLabel).toLowerCase();
-    document.getElementById('tobInner').innerHTML = rows.map(function(r){
-      var head = '<span class="tob-name">' + esc(shortName(r.m)) + '<small>табак' + (month ? ', ' + esc(month) : '') + '</small></span>';
+    var many = rows.length > 1; // имя — только на общей странице (все менеджеры)
+    bar.innerHTML = rows.map(function(r){
+      var lbl = 'табак' + (month ? ', ' + month : '');
+      var head = many
+        ? '<span class="tob-name">' + esc(shortName(r.m)) + '<small>' + esc(lbl) + '</small></span>'
+        : '<span class="tob-lbl">План по ' + esc(lbl.replace(/^табак/, 'табаку')) + '</span>';
       if(r.plan > 0){
         var pct = Math.round(r.fact / r.plan * 100);
         var cls = pct >= 100 ? 'ok' : (pct < 50 ? 'low' : '');
@@ -2401,23 +2393,6 @@
     }).join('');
     bar.hidden = false;
   }
-
-  (function tobaccoBarScroll(){
-    var bar = document.getElementById('tobBar');
-    if(bar.hidden) return;
-    var lastY = window.pageYOffset || 0, ticking = false;
-    function update(){
-      ticking = false;
-      var y = Math.max(0, window.pageYOffset || document.documentElement.scrollTop || 0);
-      var dy = y - lastY;
-      if(y <= bar.offsetHeight){ bar.classList.remove('tob-hide'); lastY = y; return; }
-      if(dy > 6){ bar.classList.add('tob-hide'); lastY = y; }
-      else if(dy < -6){ bar.classList.remove('tob-hide'); lastY = y; }
-    }
-    window.addEventListener('scroll', function(){
-      if(!ticking){ ticking = true; window.requestAnimationFrame(update); }
-    }, { passive: true });
-  })();
 
   // ---------- файл менеджера: выбор менеджера не нужен ----------
   // Если в файле один менеджер, выбираем его
