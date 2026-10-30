@@ -487,6 +487,65 @@
   }
   .dark-card .dark-bar i.full{ background: var(--hit); }
 
+  /* План по табаку: под логотипом на всех вкладках */
+  .tob{ margin: -6px 2px 18px; }
+  .tob[hidden]{ display:none; }
+  .tob-row + .tob-row{ margin-top: 14px; }
+  .tob-top{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    gap:10px;
+    margin-bottom:6px;
+  }
+  .tob-lbl{ font-size:11.5px; color: var(--ink-faint); }
+  .tob-name{
+    font-family:'Uni Sans','Montserrat',Arial,sans-serif;
+    font-weight:700;
+    font-size:13px;
+    color: var(--ink);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .tob-name small{
+    font-family:'Circe','Manrope',Arial,sans-serif;
+    font-weight:500;
+    font-size:11.5px;
+    color: var(--ink-faint);
+    margin-left: 6px;
+  }
+  .tob-pct{
+    font-family:'Uni Sans','Montserrat',Arial,sans-serif;
+    font-weight:700;
+    font-size:17px;
+    line-height:1;
+    flex-shrink:0;
+  }
+  .tob-pct.ok{ color: var(--hit); }
+  .tob-pct.low{ color: var(--miss); }
+  .tob-bar{
+    height:7px;
+    border-radius:99px;
+    background: var(--panel-2);
+    overflow:hidden;
+  }
+  :root[data-theme="light"] .tob-bar{ background: var(--line); }
+  .tob-bar i{
+    display:block;
+    height:100%;
+    background: var(--amber);
+    border-radius:99px;
+  }
+  .tob-bar i.full{ background: var(--hit); }
+  .tob-note{
+    margin-top:6px;
+    font-size:11.5px;
+    color: var(--ink-dim);
+    font-variant-numeric: tabular-nums;
+  }
+  .tob-note b{ font-weight:600; color: var(--ink); }
+
   /* KPI-вкладки: карточка плана и поля планов в админке */
   .plan-card{
     background: var(--panel-2);
@@ -883,6 +942,8 @@
     <div class="periods-panel" id="periodsPanel" hidden></div>
     <div class="periods-panel tips-panel" id="tipsPanel" hidden></div>
   </header>
+
+  <div class="tob" id="tobBar" hidden></div>
 
   <div class="view-tabs" id="viewTabs">
     <button class="view-tab active" data-view="positions" type="button">Незакупленные позиции</button>
@@ -2291,6 +2352,47 @@
   rebuildKpiData('esdn', ESDN_DATA);
   rebuildDarkData(DARK_DATA);
   renderPeriodBadge();
+  renderTobaccoBar();
+
+  // ---------- план по табаку (сверху, на всех вкладках) ----------
+  // Факт — все продажи табака менеджера за текущий месяц (отчёт «KPI - АКБ табак»),
+  // план — plans.json → «Табак» (на странице менеджера — число, на общей — по менеджерам).
+  function renderTobaccoBar(){
+    var bar = document.getElementById('tobBar');
+    var p = PLANS['Табак'];
+    var names = salesManagers.slice();
+    if(p && typeof p === 'object'){
+      Object.keys(p).forEach(function(n){ if(names.indexOf(n) < 0) names.push(n); });
+    }
+    if(!names.length){ bar.hidden = true; return; }
+    var monthLabel = '';
+    var rows = names.map(function(m){
+      var fact = 0;
+      (salesByManager[m] || []).forEach(function(e){
+        var cur = e.months.length ? e.months[e.months.length-1] : null;
+        if(cur){ fact += cur.revenue || 0; if(!monthLabel) monthLabel = cur.label; }
+      });
+      return { m: m, fact: fact, plan: planFor('Табак', m) };
+    });
+    var month = monthShort(monthLabel).toLowerCase();
+    var many = rows.length > 1; // имя — только на общей странице (все менеджеры)
+    bar.innerHTML = rows.map(function(r){
+      var lbl = 'табак' + (month ? ', ' + month : '');
+      var head = many
+        ? '<span class="tob-name">' + esc(shortName(r.m)) + '<small>' + esc(lbl) + '</small></span>'
+        : '<span class="tob-lbl">План по ' + esc(lbl.replace(/^табак/, 'табаку')) + '</span>';
+      if(r.plan > 0){
+        var pct = Math.round(r.fact / r.plan * 100);
+        var cls = pct >= 100 ? 'ok' : (pct < 50 ? 'low' : '');
+        return '<div class="tob-row"><div class="tob-top">' + head + '<span class="tob-pct ' + cls + '">' + pct + '%</span></div>' +
+          '<div class="tob-bar"><i class="' + (pct >= 100 ? 'full' : '') + '" style="width:' + Math.max(0, Math.min(100, pct)) + '%"></i></div>' +
+          '<div class="tob-note">План <b>' + formatMoney(r.plan) + ' ₽</b> / факт <b>' + formatMoney(r.fact) + ' ₽</b></div></div>';
+      }
+      return '<div class="tob-row"><div class="tob-top">' + head + '<span class="tob-pct">—</span></div>' +
+        '<div class="tob-note">Факт <b>' + formatMoney(r.fact) + ' ₽</b> · план не задан</div></div>';
+    }).join('');
+    bar.hidden = false;
+  }
 
   // ---------- файл менеджера: выбор менеджера не нужен ----------
   // Если в файле один менеджер, выбираем его

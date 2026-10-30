@@ -82,7 +82,8 @@ async function main(){
   const cfg = readJson(path.join(ROOT, 'config.json'));
   let plans = readJson(path.join(ROOT, 'plans.json'));
   if(process.env.PLANS_JSON){
-    try{ plans = JSON.parse(process.env.PLANS_JSON); console.log('Планы взяты из переменной PLANS_JSON.'); }
+    // переменная дополняет plans.json: разделы из неё заменяют одноимённые разделы файла, остальные берутся из файла
+    try{ const env = JSON.parse(process.env.PLANS_JSON); plans = Object.assign({}, plans, env); console.log('Планы из переменной PLANS_JSON: ' + Object.keys(env).join(', ') + '; остальные — из plans.json.'); }
     catch(e){ fail('Переменная PLANS_JSON содержит некорректный JSON: ' + e.message); }
   }
   const template = fs.readFileSync(path.join(ROOT, 'template.html'), 'utf8');
@@ -151,6 +152,7 @@ async function main(){
       data: f(all.data), meta: all.meta, sales: f(all.sales), accessories: f(all.accessories),
       esdn: f(all.esdn), dark: f(all.dark),
       plans: {
+        'Табак': Number((plans['Табак'] || {})[mg.name]) || 0,
         'Аксессуары': Number((plans['Аксессуары'] || {})[mg.name]) || 0,
         'ЭСДН': Number((plans['ЭСДН'] || {})[mg.name]) || 0
       }
@@ -165,7 +167,7 @@ async function main(){
   });
   if(cfg.allPage && cfg.allPage.enabled){
     pages.push({ slug: cfg.allPage.slug, title: 'Незакупленные позиции — ' + cfg.allPage.title,
-      payload: Object.assign({}, all, { plans: { 'Аксессуары': plans['Аксессуары'] || {}, 'ЭСДН': plans['ЭСДН'] || {} } }),
+      payload: Object.assign({}, all, { plans: { 'Табак': plans['Табак'] || {}, 'Аксессуары': plans['Аксессуары'] || {}, 'ЭСДН': plans['ЭСДН'] || {} } }),
       info: 'Общая страница: все менеджеры' });
   }
   if(!pages.length) fail('Ни одной страницы не получилось собрать.');

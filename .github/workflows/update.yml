@@ -4,6 +4,10 @@ on:
   schedule:
     # Время по UTC. Самара = UTC+4, поэтому 06:15 UTC = 10:15 в Самаре.
     - cron: '15 6 * * 1-5'   # 10:15 Самара, Пн–Пт
+  push:                       # правка планов (plans.json) — страницы пересобираются сразу
+    branches: [main]
+    paths:
+      - plans.json
   workflow_dispatch:          # кнопка «Run workflow»; так же workflow запускает 1С после выгрузки
     inputs:
       force_tips:
