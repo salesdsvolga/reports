@@ -218,10 +218,20 @@ function build(exp, cfg){
       r.statusProp = st ? ctx.propIds(st) : [];
     } else if(d.kind === 'dark'){
       Object.assign(r, period(s.params['СтандартныйПериод'] || s.params['Период'], today));
-      const planUf = s.userFields.find(u => /^план/i.test(u.title));
-      let pn = null;
-      if(planUf){ const m = /Партнер\.\[([^\]]+)\]/.exec(planUf.expr); if(m) pn = m[1]; }
-      if(!pn) pn = findProp(s, /^Партнер\.\[(ТС [^\]]+)\]/);
+      // Реквизит плана: реквизит партнёра, который выводится в группировках отчёта и на который
+      // ссылаются пользовательские поля (план, % выполнения). Старые поля («План ТС 10.26»)
+      // могут остаться в настройках — поэтому сначала смотрим, что реально стоит в группировках.
+      const refs = new Set();
+      s.userFields.forEach(u => (u.expr.match(/Партнер\.\[[^\]]+\]/g) || []).forEach(x => refs.add(x.slice(8, -1))));
+      const grouped = s.groupFields.map(g => (/^Партнер\.\[([^\]]+)\]$/.exec(g) || [])[1]).filter(Boolean);
+      const notMeta = x => !/^(Тип клиента|Статус клиента)/i.test(x);
+      let pn = grouped.filter(x => refs.has(x) && notMeta(x)).pop() || null;
+      if(!pn){
+        const planUf = s.userFields.filter(u => /^план/i.test(u.title)).pop();
+        const m = planUf && /Партнер\.\[([^\]]+)\]/.exec(planUf.expr);
+        if(m) pn = m[1];
+      }
+      if(!pn) pn = grouped.filter(x => /^ТС /.test(x)).pop() || findProp(s, /^Партнер\.\[(ТС [^\]]+)\]/);
       r.planPropertyName = pn ? propName(pn) : null;
       // для диагностики: пользовательские поля отчёта и реквизиты партнёра, на которые они ссылаются
       r.planDebug = s.userFields.map(u => '«' + u.title + '» → ' + (Array.from(new Set((u.expr.match(/Партнер\.\[[^\]]+\]/g) || []))).join(', ') || '—')).join('; ')
