@@ -222,7 +222,7 @@ function build(exp, cfg){
       // ссылаются пользовательские поля (план, % выполнения). Старые поля («План ТС 10.26»)
       // могут остаться в настройках — поэтому сначала смотрим, что реально стоит в группировках.
       const refs = new Set();
-      s.userFields.forEach(u => (u.expr.match(/Партнер\.\[[^\]]+\]/g) || []).forEach(x => refs.add(x.slice(8, -1))));
+      s.userFields.forEach(u => (u.expr.match(/Партнер\.\[[^\]]+\]/g) || []).forEach(x => refs.add(x.slice("Партнер.[".length, -1))));
       const grouped = s.groupFields.map(g => (/^Партнер\.\[([^\]]+)\]$/.exec(g) || [])[1]).filter(Boolean);
       const notMeta = x => !/^(Тип клиента|Статус клиента)/i.test(x);
       let pn = grouped.filter(x => refs.has(x) && notMeta(x)).pop() || null;
