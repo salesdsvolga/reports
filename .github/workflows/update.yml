@@ -19,6 +19,7 @@ permissions:
   contents: write   # журнал советов хранится в релизе tips-state
   pages: write
   id-token: write
+  deployments: read   # найти зависшую публикацию страниц
 
 concurrency:
   group: pages
@@ -152,5 +153,22 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      # GitHub публикует страницы по очереди. Если предыдущая публикация зависла
+      # («in progress deployment»), новая не проходит. Запуски идут строго друг за другом
+      # (concurrency: pages), поэтому всё, что сейчас числится «в процессе», — зависшее: снимаем.
+      - name: Снять зависшие публикации
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          for sha in $(gh api "repos/$REPO/deployments?environment=github-pages&per_page=15" --jq '.[].sha' | sort -u); do
+            st=$(gh api "repos/$REPO/pages/deployments/$sha" --jq '.status' 2>/dev/null || true)
+            case "$st" in
+              ""|succeed|deployment_cancelled|deployment_failed|deployment_content_failed|deployment_lost|deployment_attempt_error) ;;
+              *) echo "Зависшая публикация $sha (статус $st) — отменяю"; gh api -X POST "repos/$REPO/pages/deployments/$sha/cancel" || true ;;
+            esac
+          done
+
       - id: deployment
         uses: actions/deploy-pages@v4
