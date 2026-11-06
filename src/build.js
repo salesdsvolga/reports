@@ -65,7 +65,9 @@ function parsePasswords(text){
 
 function encryptPage(plainPath, outDir, password){
   const bin = require.resolve('staticrypt/cli/index.js');
-  // staticrypt ждёт относительные пути, поэтому запускаем из корня проекта
+  // staticrypt ждёт относительные пути, поэтому запускаем из корня проекта.
+  // Соль шифрования — постоянная, из .staticrypt.json в репозитории: иначе при каждой сборке
+  // соль новая и «Запомнить на этом устройстве» сбрасывается (соль и так видна в каждой странице).
   execFileSync(process.execPath, [bin, path.relative(ROOT, plainPath), '-d', path.relative(ROOT, outDir), '-c', '.staticrypt.json', '--short',
     '--template-title', 'Отчёт по дистрибуции',
     '--template-instructions', 'Введите пароль, который вам выдали',
@@ -73,8 +75,10 @@ function encryptPage(plainPath, outDir, password){
     '--template-button', 'Открыть',
     '--template-error', 'Неверный пароль',
     '--template-remember', 'Запомнить на этом устройстве',
-    '--template-color-primary', '#2f2f2f',
-    '--template-color-secondary', '#000000'
+    '--template-toggle-show', 'Показать пароль',
+    '--template-toggle-hide', 'Скрыть пароль',
+    // окно пароля в стиле отчётов (шапка, цвета, шрифты, тема)
+    '-t', 'template-password.html'
   ], { cwd: ROOT, env: Object.assign({}, process.env, { STATICRYPT_PASSWORD: password }), stdio: ['ignore', 'ignore', 'inherit'] });
 }
 
