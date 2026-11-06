@@ -119,7 +119,12 @@ async function main(){
       const u = parsed[k].unmapped || [];
       if(u.length) console.warn((process.env.GITHUB_ACTIONS ? '::warning::' : '  ⚠ ') + 'ММЛ ' + k + ': товары проходят отбор отчёта «' + parsed[k].reportName + '», но не попали ни в одну позицию поля «Выбор» и не учитываются (' + u.length + '): ' + u.slice(0, 15).join('; ') + (u.length > 15 ? '; …' : ''));
     });
-    if(!dark.planFound) console.warn('  ⚠ в 1С не найден реквизит плана «' + dark.planProperty + '» — планы «Тёмных сил» будут нулевыми.');
+    const GA = !!process.env.GITHUB_ACTIONS;
+    // сводка для вкладки Actions (видна без открытия логов)
+    console.log((GA ? '::notice title=Выгрузка 1С::' : '  ℹ ') + 'выгрузка от ' + String(got.exportData.createdAt).replace('T', ' ') +
+      '; Тёмные силы: отчёт «' + (dark.reportName || '').trim() + '», период ' + dark.period + ', план из реквизита «' + (dark.planProperty || 'не найден') + '» — заполнен у ' + dark.planFilled + ' точек на странице, сумма планов ' + dark.planSum);
+    if(!dark.planFound) console.warn((GA ? '::warning::' : '  ⚠ ') + 'Тёмные силы: в 1С не найден реквизит плана «' + dark.planProperty + '» (берётся из пользовательского поля «План …» отчёта) — планы будут нулевыми.');
+    else if(!dark.planFilled) console.warn((GA ? '::warning::' : '  ⚠ ') + 'Тёмные силы: реквизит плана «' + dark.planProperty + '» найден, но ни у одной точки на страницах он не заполнен.');
     cfg.files.forEach(function(d){
       if(!parsed[d.key] || !parsed[d.key].data.length) fail('В выгрузке 1С нет данных для отчёта «' + d.key + '». Проверьте отборы этого отчёта в рассылке «123» и менеджеров в config.json.');
     });
