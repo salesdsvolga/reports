@@ -123,6 +123,7 @@ async function main(){
     // сводка для вкладки Actions (видна без открытия логов)
     console.log((GA ? '::notice title=Выгрузка 1С::' : '  ℹ ') + 'выгрузка от ' + String(got.exportData.createdAt).replace('T', ' ') +
       '; Тёмные силы: отчёт «' + (dark.reportName || '').trim() + '», период ' + dark.period + ', план из реквизита «' + (dark.planProperty || 'не найден') + '» — заполнен у ' + dark.planFilled + ' точек на странице, сумма планов ' + dark.planSum);
+    console.log((GA ? '::notice title=Тёмные силы: поля отчёта::' : '  ℹ ') + (dark.planDebug || ''));
     if(!dark.planFound) console.warn((GA ? '::warning::' : '  ⚠ ') + 'Тёмные силы: в 1С не найден реквизит плана «' + dark.planProperty + '» (берётся из пользовательского поля «План …» отчёта) — планы будут нулевыми.');
     else if(!dark.planFilled) console.warn((GA ? '::warning::' : '  ⚠ ') + 'Тёмные силы: реквизит плана «' + dark.planProperty + '» найден, но ни у одной точки на страницах он не заполнен.');
     cfg.files.forEach(function(d){

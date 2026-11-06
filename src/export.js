@@ -117,7 +117,7 @@ function compute(exp, cfg, managers){
       out.push({ t: p.name.trim(), m: mgrName(p), plan: pv && typeof pv.val === 'number' ? pv.val : 0, fact: round2(fact.get(p.id) || 0) });
     });
     return { data: sortRows(out), period: ruDate(r.from) + ' - ' + ruDate(r.to), planProperty: r.planPropertyName, planFound: r.planProp.length > 0,
-      planFilled: out.filter(e => e.plan > 0).length, planSum: round2(out.reduce((a, e) => a + e.plan, 0)) };
+      planFilled: out.filter(e => e.plan > 0).length, planDebug: r.planDebug, planSum: round2(out.reduce((a, e) => a + e.plan, 0)) };
   }
 
   const src = 'выгрузка 1С от ' + ruDate(String(exp.createdAt)) + ' ' + String(exp.createdAt).slice(11, 16);

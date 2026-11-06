@@ -223,6 +223,9 @@ function build(exp, cfg){
       if(planUf){ const m = /Партнер\.\[([^\]]+)\]/.exec(planUf.expr); if(m) pn = m[1]; }
       if(!pn) pn = findProp(s, /^Партнер\.\[(ТС [^\]]+)\]/);
       r.planPropertyName = pn ? propName(pn) : null;
+      // для диагностики: пользовательские поля отчёта и реквизиты партнёра, на которые они ссылаются
+      r.planDebug = s.userFields.map(u => '«' + u.title + '» → ' + (Array.from(new Set((u.expr.match(/Партнер\.\[[^\]]+\]/g) || []))).join(', ') || '—')).join('; ')
+        + ' | группировки: ' + s.groupFields.filter(g => /^Партнер\.\[/.test(g)).join(', ');
       try{ r.planProp = pn ? ctx.propIds(pn) : []; } catch(e){ r.planProp = []; }
     } else {
       const step = s.params['ШагПериодовСравнения'];
