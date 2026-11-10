@@ -38,7 +38,9 @@ function rowInfo(row){
   };
 }
 
-function reportSettings(exp, cfg){
+// строки (отчёты) рассылки из выгрузки; rowInfo вызывается лениво — ошибка настроек
+// одного отчёта не мешает читать остальные
+function mailingRows(exp, cfg){
   if(!exp.mailingsJson) throw new Error('в выгрузке 1С нет настроек рассылок (mailingsJson) — обновите расширение pe_Portal');
   let mailings;
   try{ mailings = JSON.parse(exp.mailingsJson); }
@@ -47,22 +49,49 @@ function reportSettings(exp, cfg){
   const m = mailings.find(x => norm(x.name) === norm(want));
   if(!m) throw new Error('в 1С не найдена рассылка «' + want + '» (есть: ' + mailings.map(x => x.name).join(', ') + ')');
   const rows = [];
-  Object.keys(m.tables || {}).forEach(t => (m.tables[t] || []).forEach(r => {
+  Object.keys(m.tables || {}).forEach(t => (m.tables[t] || []).forEach(r => rows.push(r)));
+  return { want, rows };
+}
+
+function settingsOf(r){
+  const fullOwn = r.own.find(o => o.kind === 'Settings');
+  const base = fullOwn ? fullOwn.xml : r.base[0].xml;
+  const user = r.own.filter(o => o.kind === 'UserSettings').map(o => o.xml);
+  return Object.assign(dcs.readSettings(base, user), { reportName: r.name });
+}
+
+const nameHas = (r, match) => r.names.some(n => match.every(w => norm(n).indexOf(norm(w)) >= 0));
+
+function reportSettings(exp, cfg){
+  const { want, rows: raw } = mailingRows(exp, cfg);
+  const rows = [];
+  raw.forEach(r => {
     const info = rowInfo(r);
     if(info.base.length || info.own.some(o => o.kind === 'Settings')) rows.push(info);
-  }));
+  });
   const out = {};
   cfg.files.forEach(d => {
-    const hits = rows.filter(r => r.names.some(n => d.match.every(w => norm(n).indexOf(norm(w)) >= 0)));
+    const hits = rows.filter(r => nameHas(r, d.match));
     if(!hits.length) throw new Error('в рассылке «' + want + '» нет отчёта для «' + d.key + '» (ищу в названии: ' + d.match.join(' + ') + '). Отчёты рассылки: ' + rows.map(r => '«' + r.name + '»').join(', '));
     if(hits.length > 1) throw new Error('в рассылке «' + want + '» под «' + d.key + '» подходят несколько отчётов: ' + hits.map(r => '«' + r.name + '»').join(', '));
-    const r = hits[0];
-    const fullOwn = r.own.find(o => o.kind === 'Settings');
-    const base = fullOwn ? fullOwn.xml : r.base[0].xml;
-    const user = r.own.filter(o => o.kind === 'UserSettings').map(o => o.xml);
-    out[d.key] = Object.assign(dcs.readSettings(base, user), { reportName: r.name });
+    out[d.key] = settingsOf(hits[0]);
   });
   return out;
+}
+
+// Один отчёт рассылки по словам в названии (для дополнительных разделов, например «Плоский отчет - полная»).
+// Возвращает null, если такого отчёта в рассылке нет.
+function findReport(exp, cfg, match){
+  const { want, rows: raw } = mailingRows(exp, cfg);
+  const hits = [];
+  raw.forEach(r => {
+    let info;
+    try{ info = rowInfo(r); }catch(e){ return; } // ошибки чужих отчётов здесь не важны
+    if((info.base.length || info.own.some(o => o.kind === 'Settings')) && nameHas(info, match)) hits.push(info);
+  });
+  if(!hits.length) return null;
+  if(hits.length > 1) throw new Error('в рассылке «' + want + '» под «' + match.join(' + ') + '» подходят несколько отчётов: ' + hits.map(r => '«' + r.name + '»').join(', '));
+  return settingsOf(hits[0]);
 }
 
 // ---------- период ----------
@@ -250,4 +279,4 @@ function build(exp, cfg){
   return { spec, ctx };
 }
 
-module.exports = { build, reportSettings, period, propName };
+module.exports = { build, reportSettings, findReport, makeContext, compileFilters, period, propName };
