@@ -12,12 +12,22 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - run: npm ci
-      - name: Выгрузка
+      - name: Сборка из выгрузки без публикации
         run: |
           mkdir -p .export
           gh release download data-export --pattern export.zip --dir .export
           7z x -y -p"$EXPORT_PASSWORD" -o.export .export/export.zip > /dev/null
-          node tools/diag.js .export/export.json
+          node src/build.js --source=export:.export/export.json
+          node -e "
+            const fs=require('fs');
+            for(const f of fs.readdirSync('out').filter(x=>x.endsWith('.html')&&x!=='index.html')){
+              const h=fs.readFileSync('out/'+f,'utf8');
+              const m=/<script id=\"ttdata\" type=\"application\/json\">([\s\S]*?)<\/script>/.exec(h);
+              const p=JSON.parse(m[1]); const L=p.launch;
+              if(!L){ console.log(f+': раздела нет'); continue; }
+              const d=L.data; const c=(fn)=>d.filter(fn).length;
+              console.log(f+': точек '+d.length+', АКБ '+c(e=>e.akb)+', выполнено '+c(e=>e.akb&&e.done)+', сверх АКБ '+c(e=>!e.akb)+', Хорека '+c(e=>e.ch==='Хорека')+', Розница '+c(e=>e.ch==='Розница')+', с покупкой не той фасовки '+c(e=>!e.done&&Object.keys(e.q).length));
+            }"
         env:
           GH_TOKEN: ${{ github.token }}
           EXPORT_PASSWORD: ${{ secrets.EXPORT_PASSWORD }}

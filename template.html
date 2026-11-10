@@ -487,6 +487,37 @@
   }
   .dark-card .dark-bar i.full{ background: var(--hit); }
 
+  /* Вкладка новинки (Грин Бим 2.0) */
+  .gb-card{ border-left: 3px solid var(--miss); }
+  .gb-card.done{ border-left-color: var(--hit); }
+  .gb-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:10px; margin-bottom:9px; }
+  .gb-head .nosales-name{ margin-bottom:0; }
+  .gb-badge{
+    flex:none;
+    font-size:11px;
+    font-weight:700;
+    padding:3px 8px;
+    border-radius:99px;
+    white-space:nowrap;
+    background: var(--miss-bg);
+    color: var(--miss);
+  }
+  .gb-card.done .gb-badge{ background: var(--hit-bg); color: var(--hit); }
+  .gb-sub{ font-size:11.5px; color:var(--ink-dim); margin:-4px 0 9px; line-height:1.4; }
+  .gb-card .nosales-table .m-val.off{ opacity:.45; }
+  .gb-card .nosales-table .m-val.hitv{ color: var(--hit); }
+  .gb-card .nosales-table .m-lbl.off{ opacity:.55; }
+  .gb-section{
+    font-size:11px;
+    font-weight:700;
+    text-transform:uppercase;
+    letter-spacing:.04em;
+    color:var(--ink-faint);
+    margin:6px 2px 0;
+  }
+  .gb-rule{ font-size:11.5px; color:var(--ink-dim); line-height:1.45; margin:0 2px 12px; }
+  .gb-rule b{ color:var(--ink); font-weight:600; }
+
   /* План по табаку: под логотипом на всех вкладках */
   .tob{ margin: -6px 2px 18px; }
   .tob[hidden]{ display:none; }
@@ -951,6 +982,7 @@
     <button class="view-tab" data-view="accessories" type="button">Аксессуары</button>
     <button class="view-tab" data-view="esdn" type="button">ЭСДН</button>
     <button class="view-tab" data-view="dark" type="button">Тёмные силы</button>
+    <button class="view-tab" data-view="launch" type="button" id="launchTab" style="display:none;">Новинка</button>
   </div>
 
   <div id="viewPositions">
@@ -1134,10 +1166,37 @@
     </section>
   </div>
 
+  <div id="viewLaunch" style="display:none;">
+    <section class="panel" id="panelLaunchManager">
+      <h2>Менеджер<small id="gbMgrHint">Кто ведёт точку</small></h2>
+      <div class="mgr-grid" id="gbMgrGrid"></div>
+    </section>
+
+    <section class="panel" id="panelLaunchList" style="display:none;">
+      <div class="plan-card" id="gbPlanCard"></div>
+      <div class="gb-rule" id="gbRule"></div>
+      <div class="tt-card">
+        <div>
+          <div class="tt-name" id="gbManagerName"></div>
+          <div class="tt-meta" id="gbMeta"></div>
+        </div>
+        <button class="reset-btn" id="gbBackBtn">Сменить менеджера</button>
+      </div>
+      <div class="status-filter" id="gbFilter" role="group" aria-label="Фильтр по точкам"></div>
+      <div class="field" style="margin-bottom:12px;">
+        <input type="text" id="gbSearch" placeholder="Поиск по точкам…" autocomplete="off">
+        <button class="clear-x" id="gbClear" style="display:none;" aria-label="Очистить">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="nosales-list" id="gbList"></div>
+    </section>
+  </div>
+
   <footer>Данные загружаются из отчёта — период и охват зависят от файла</footer>
 </div>
 
-<script id="ttdata" type="application/json">{"data":[],"meta":{},"sales":[],"accessories":[],"esdn":[],"dark":[],"plans":{}}</script>
+<script id="ttdata" type="application/json">{"data":[],"meta":{},"sales":[],"accessories":[],"esdn":[],"dark":[],"launch":null,"plans":{}}</script>
 <script id="coreScript">
 (function(){
   var PAYLOAD = JSON.parse(document.getElementById('ttdata').textContent);
@@ -1147,6 +1206,7 @@
   var ACC_DATA = PAYLOAD.accessories || [];
   var ESDN_DATA = PAYLOAD.esdn || [];
   var DARK_DATA = PAYLOAD.dark || [];
+  var LAUNCH = PAYLOAD.launch || null;
   var PLANS = PAYLOAD.plans || {};
 
   // ---------- theme ----------
@@ -1194,6 +1254,7 @@
     document.getElementById('viewAccessories').style.display = view === 'accessories' ? 'block' : 'none';
     document.getElementById('viewEsdn').style.display = view === 'esdn' ? 'block' : 'none';
     document.getElementById('viewDark').style.display = view === 'dark' ? 'block' : 'none';
+    document.getElementById('viewLaunch').style.display = view === 'launch' ? 'block' : 'none';
   }
   Array.prototype.forEach.call(document.querySelectorAll('.view-tab'), function(btn){
     btn.addEventListener('click', function(){ setView(btn.dataset.view); });
@@ -1886,6 +1947,205 @@
     if(darkState.manager){ renderDarkCards(darkState.manager); darkSearch.focus(); }
   });
 
+  // ---------- Новинка (дистрибуция, например «Грин Бим 2.0») ----------
+  // Данные считаются при сборке (src/launch.js): по каждой точке — канал, входит ли в АКБ,
+  // сколько пачек каждой фасовки продано с начала продаж и выполнена ли задача.
+  var gbByManager = {};
+  var gbManagers = [];
+  var gbState = { manager: null, filter: null, query: '' };
+  var gbMgrGrid = document.getElementById('gbMgrGrid');
+  var GB_PACKS = ['25', '100', '250'];
+  var GB_FILTERS = [
+    { key:'todo',  label:'Нужно продать', test:function(e){ return e.akb && !e.done; } },
+    { key:'done',  label:'Выполнено',     test:function(e){ return e.akb && e.done; } },
+    { key:'extra', label:'Сверх АКБ',     test:function(e){ return !e.akb; } },
+    { key:'Хорека',  label:'Хорека',      test:function(e){ return e.ch === 'Хорека'; } },
+    { key:'Розница', label:'Розница',     test:function(e){ return e.ch === 'Розница'; } }
+  ];
+
+  function gbRuDate(iso){ return iso ? iso.slice(8,10) + '.' + iso.slice(5,7) + '.' + iso.slice(0,4) : ''; }
+  function gbPacksFor(ch){ var p = (LAUNCH && LAUNCH.meta && LAUNCH.meta.packs) || {}; return (p[ch] || []).map(String); }
+  function gbPackText(list){ return list.map(function(x){ return x + ' г'; }).join(' или '); }
+
+  function rebuildLaunchData(launch){
+    LAUNCH = launch && launch.meta ? launch : null;
+    var tab = document.getElementById('launchTab');
+    gbByManager = {};
+    if(!LAUNCH){ tab.style.display = 'none'; gbManagers = []; return; }
+    tab.textContent = LAUNCH.meta.title || 'Новинка';
+    tab.style.display = '';
+    (LAUNCH.data || []).forEach(function(e){
+      if(!gbByManager[e.m]) gbByManager[e.m] = [];
+      gbByManager[e.m].push(e);
+    });
+    gbManagers = Object.keys(gbByManager).sort(function(a,b){ return a.localeCompare(b,'ru'); });
+    var m = LAUNCH.meta;
+    var tag = function(ch){ return '<b>' + ch + '</b> — ' + gbPackText(gbPacksFor(ch)); };
+    document.getElementById('gbRule').innerHTML =
+      'Продажи новинки — с ' + esc(gbRuDate(m.start)) + '. В задаче точки АКБ: были заказы за ' + esc(m.akbLabel) +
+      '. Засчитывается: ' + tag('Хорека') + ', ' + tag('Розница') + '.';
+    resetLaunchView();
+    buildLaunchManagerGrid();
+  }
+
+  function gbCounts(list){
+    var akb = list.filter(function(e){ return e.akb; });
+    var done = akb.filter(function(e){ return e.done; }).length;
+    return { akb: akb.length, done: done, extra: list.length - akb.length };
+  }
+
+  function buildLaunchManagerGrid(){
+    gbMgrGrid.innerHTML = '';
+    var hintEl = document.getElementById('gbMgrHint');
+    if(!gbManagers.length){
+      if(hintEl) hintEl.textContent = 'Нет данных';
+      var empty = document.createElement('div');
+      empty.className = 'mgr-empty';
+      empty.textContent = 'Точек по разделу пока нет.';
+      gbMgrGrid.appendChild(empty);
+      return;
+    }
+    if(hintEl) hintEl.textContent = 'Кто ведёт точку';
+    gbManagers.forEach(function(m){
+      var card = document.createElement('button');
+      card.type = 'button';
+      card.className = 'mgr-card';
+      var disp = shortName(m);
+      var initials = disp.split(' ').filter(Boolean).slice(0,2).map(function(w){return w[0];}).join('').toUpperCase();
+      var c = gbCounts(gbByManager[m]);
+      card.innerHTML = '<span class="av">'+initials+'</span><span class="info"><span class="name">'+esc(disp)+'</span><span class="count">'+c.done+' из '+c.akb+' выполнено</span></span>';
+      card.addEventListener('click', function(){ selectLaunchManager(m, card); });
+      gbMgrGrid.appendChild(card);
+    });
+    if(gbManagers.length === 1) selectLaunchManager(gbManagers[0], gbMgrGrid.children[0], true);
+  }
+
+  function resetLaunchView(){
+    gbState.manager = null; gbState.filter = null; gbState.query = '';
+    gbSearch.value = ''; gbClear.style.display = 'none';
+    Array.prototype.forEach.call(gbMgrGrid.children, function(c){ c.classList.remove('selected'); });
+    document.getElementById('panelLaunchList').style.display = 'none';
+  }
+
+  function selectLaunchManager(m, cardEl, silent){
+    gbState.manager = m; gbState.filter = null; gbState.query = '';
+    gbSearch.value = ''; gbClear.style.display = 'none';
+    Array.prototype.forEach.call(gbMgrGrid.children, function(c){ c.classList.remove('selected'); });
+    if(cardEl) cardEl.classList.add('selected');
+    renderLaunch(m);
+    document.getElementById('panelLaunchList').style.display = 'block';
+    if(!silent) document.getElementById('panelLaunchList').scrollIntoView({behavior:'smooth', block:'start'});
+  }
+
+  function renderLaunch(m){
+    var list = gbByManager[m] || [];
+    document.getElementById('gbManagerName').textContent = shortName(m);
+    var c = gbCounts(list);
+    var pct = c.akb ? Math.round(c.done / c.akb * 100) : 0;
+    var byCh = function(ch){
+      var a = list.filter(function(e){ return e.akb && e.ch === ch; });
+      return ch + ' ' + a.filter(function(e){ return e.done; }).length + ' из ' + a.length;
+    };
+    document.getElementById('gbPlanCard').innerHTML =
+      '<div class="plan-top"><span class="plan-lbl">' + esc((LAUNCH.meta.title || 'Новинка')) + ' · выполнено по АКБ</span><span class="plan-pct ' + (pct >= 100 ? 'ok' : (pct < 50 ? 'low' : '')) + '">' + pct + '%</span></div>' +
+      '<div class="plan-bar"><i class="' + (pct >= 100 ? 'full' : '') + '" style="width:' + Math.max(0, Math.min(100, pct)) + '%"></i></div>' +
+      '<div class="plan-note">' + c.done + ' из ' + c.akb + ' · ' + byCh('Хорека') + ' · ' + byCh('Розница') +
+      (c.extra ? ' · ещё ' + c.extra + ' ' + pluralPoints(c.extra) + ' сверх АКБ' : '') + '</div>';
+    renderLaunchFilter(m);
+    renderLaunchCards(m);
+  }
+
+  function renderLaunchFilter(m){
+    var el = document.getElementById('gbFilter');
+    var list = gbByManager[m] || [];
+    el.innerHTML = '';
+    GB_FILTERS.forEach(function(f){
+      var n = list.filter(f.test).length;
+      if(f.key === 'extra' && !n) return;
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'status-chip' + (gbState.filter === f.key ? ' active' : '');
+      b.textContent = f.label + ' (' + n + ')';
+      b.addEventListener('click', function(){
+        gbState.filter = gbState.filter === f.key ? null : f.key; // повторный клик снимает фильтр
+        renderLaunchFilter(m); renderLaunchCards(m);
+      });
+      el.appendChild(b);
+    });
+  }
+
+  function gbCard(e){
+    var ok = gbPacksFor(e.ch);
+    var card = document.createElement('div');
+    card.className = 'nosales-card gb-card' + (e.done ? ' done' : '');
+    var badge = e.done ? 'Выполнено' : (e.akb ? 'Нужно продать' : '');
+    var sub = e.ch + ': нужно ' + gbPackText(ok);
+    var wrong = GB_PACKS.filter(function(k){ return ok.indexOf(k) < 0 && (e.q[k] || 0) > 0; });
+    if(!e.done && wrong.length) sub += ' · ' + gbPackText(wrong) + ' не засчитывается';
+    if(!e.akb) sub += ' · не из АКБ';
+    if(e.last) sub += ' · последняя покупка ' + gbRuDate(e.last).slice(0,5);
+    card.innerHTML =
+      '<div class="gb-head"><div class="nosales-name">' + esc(e.t) + '</div>' + (badge ? '<span class="gb-badge">' + badge + '</span>' : '') + '</div>' +
+      '<div class="gb-sub">' + esc(sub) + '</div>' +
+      '<div class="nosales-table">' + GB_PACKS.map(function(k){
+        return '<span class="m-lbl' + (ok.indexOf(k) < 0 ? ' off' : '') + '">' + k + ' г</span>';
+      }).join('') + '</div>' +
+      '<div class="nosales-table" style="margin-top:4px;">' + GB_PACKS.map(function(k){
+        var q = e.q[k] || 0;
+        var cls = ok.indexOf(k) < 0 ? ' off' : (q > 0 ? ' hitv' : '');
+        return '<span class="m-val' + (q ? '' : ' zero') + cls + '">' + (q ? q + ' шт' : '—') + '</span>';
+      }).join('') + '</div>';
+    return card;
+  }
+
+  function renderLaunchCards(m){
+    var all = (gbByManager[m] || []).slice().sort(function(a,b){ return a.t.localeCompare(b.t, 'ru', {sensitivity:'base'}); });
+    var f = GB_FILTERS.filter(function(x){ return x.key === gbState.filter; })[0];
+    var q = gbState.query.trim().toLocaleLowerCase('ru');
+    var list = all.filter(function(e){ return (!f || f.test(e)) && (!q || e.t.toLocaleLowerCase('ru').indexOf(q) !== -1); });
+    document.getElementById('gbMeta').textContent = list.length === all.length
+      ? all.length + ' ' + pluralPoints(all.length) + ' · по алфавиту'
+      : 'показано ' + list.length + ' из ' + all.length;
+    var container = document.getElementById('gbList');
+    container.innerHTML = '';
+    if(!list.length){
+      var empty = document.createElement('div');
+      empty.className = 'mgr-empty';
+      empty.textContent = q || f ? 'Ничего не найдено.' : 'Нет точек по этому менеджеру.';
+      container.appendChild(empty);
+      return;
+    }
+    // без фильтра по статусу — блоками: сначала «нужно продать», потом выполнено, потом сверх АКБ
+    var groups = (f && f.key !== 'Хорека' && f.key !== 'Розница') ? [[null, list]] : [
+      ['Нужно продать', list.filter(GB_FILTERS[0].test)],
+      ['Выполнено', list.filter(GB_FILTERS[1].test)],
+      ['Купили сверх АКБ', list.filter(GB_FILTERS[2].test)]
+    ];
+    groups.forEach(function(g){
+      if(!g[1].length) return;
+      if(g[0]){
+        var h = document.createElement('div');
+        h.className = 'gb-section';
+        h.textContent = g[0] + ' · ' + g[1].length;
+        container.appendChild(h);
+      }
+      g[1].forEach(function(e){ container.appendChild(gbCard(e)); });
+    });
+  }
+
+  var gbSearch = document.getElementById('gbSearch');
+  var gbClear = document.getElementById('gbClear');
+  gbSearch.addEventListener('input', function(){
+    gbState.query = gbSearch.value;
+    gbClear.style.display = gbState.query ? 'flex' : 'none';
+    if(gbState.manager) renderLaunchCards(gbState.manager);
+  });
+  gbClear.addEventListener('click', function(){
+    gbSearch.value = ''; gbState.query = ''; gbClear.style.display = 'none';
+    if(gbState.manager){ renderLaunchCards(gbState.manager); gbSearch.focus(); }
+  });
+  document.getElementById('gbBackBtn').addEventListener('click', function(){ resetLaunchView(); });
+
   function setActiveTab(tab){
     activeTab = tab;
     Array.prototype.forEach.call(document.querySelectorAll('.tt-tab'), function(b){
@@ -2351,6 +2611,7 @@
   rebuildKpiData('acc', ACC_DATA);
   rebuildKpiData('esdn', ESDN_DATA);
   rebuildDarkData(DARK_DATA);
+  rebuildLaunchData(LAUNCH);
   renderPeriodBadge();
   renderTobaccoBar();
 
@@ -2439,6 +2700,9 @@
       selectDarkManager(darkManagers[0], darkMgrGrid.children[0], true);
       hide('panelDarkManager'); hide('darkBackBtn');
     } else if(!darkManagers.length){ emptyNote('darkMgrGrid'); }
+
+    // Новинка (выбор менеджера уже сделан в buildLaunchManagerGrid)
+    if(gbManagers.length === 1){ hide('panelLaunchManager'); hide('gbBackBtn'); }
   })();
 
   window.__app = {
@@ -2446,6 +2710,7 @@
     rebuildSalesData: rebuildSalesData,
     rebuildKpiData: rebuildKpiData,
     rebuildDarkData: rebuildDarkData,
+    rebuildLaunchData: rebuildLaunchData,
     setMeta: setMeta,
     setPlans: setPlans,
     getData: function(){ return DATA; },

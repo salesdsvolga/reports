@@ -82,6 +82,40 @@ function encryptPage(plainPath, outDir, password){
   ], { cwd: ROOT, env: Object.assign({}, process.env, { STATICRYPT_PASSWORD: password }), stdio: ['ignore', 'ignore', 'inherit'] });
 }
 
+function isoDay(d, tz){
+  const p = {};
+  new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(d).forEach(function(x){ p[x.type] = x.value; });
+  return p.year + '-' + p.month + '-' + p.day;
+}
+
+function buildLaunch(cfg, got){
+  const L = cfg.launch;
+  if(!L || L.enabled === false) return null;
+  const GA = !!process.env.GITHUB_ACTIONS;
+  const title = L.title || 'Новинка';
+  const names = cfg.managers.map(function(m){ return m.name; });
+  let res;
+  try{
+    res = got.exportData ? require('./launch').fromExport(got.exportData, cfg, names)
+      : require('./launch').fromFiles(got.files, cfg, names, isoDay(got.date, cfg.timezone));
+  } catch(e){
+    console.warn((GA ? '::warning::' : '  ⚠ ') + title + ': раздел не собран — ' + e.message);
+    return null;
+  }
+  if(!res){
+    console.log((GA ? '::notice title=' + title + '::' : '  ℹ ') + (got.exportData ? 'продаж «' + L.item + '» в выгрузке нет' : 'во вложениях письма нет отчёта «' + (L.report || []).join(' + ') + '»') + ' — раздел не показывается');
+    return null;
+  }
+  res.warnings.forEach(function(w){ console.warn((GA ? '::warning::' : '  ⚠ ') + title + ': ' + w); });
+  const m = res.meta;
+  const by = function(ch){ const a = res.data.filter(function(e){ return e.akb && e.ch === ch; }); return a.filter(function(e){ return e.done; }).length + ' из ' + a.length; };
+  const extra = res.data.filter(function(e){ return !e.akb; }).length;
+  console.log((GA ? '::notice title=' + title + '::' : '  ℹ ') + 'первая продажа ' + m.start.split('-').reverse().join('.') + ', АКБ — ' + m.akbLabel +
+    '; выполнено: Хорека ' + by('Хорека') + ', Розница ' + by('Розница') + (extra ? '; сверх АКБ ' + extra : '') +
+    '; товары: ' + m.items.length + (m.reportName ? '; отчёт «' + m.reportName.trim() + '»' : ''));
+  return res;
+}
+
 async function main(){
   const cfg = readJson(path.join(ROOT, 'config.json'));
   let plans = readJson(path.join(ROOT, 'plans.json'));
@@ -143,6 +177,10 @@ async function main(){
   const generatedAt = formatDate(got.date, cfg.timezone);
   const all = reports.assemble(parsed, generatedAt);
 
+  // дистрибуция новинки (config.json → launch): ошибка здесь не ломает остальные отчёты
+  const launch = buildLaunch(cfg, got);
+  if(launch) all.meta.channels[launch.meta.title] = { period: launch.meta.period, filename: launch.meta.reportName, count: launch.data.length };
+
   console.log((got.exportData ? 'Выгрузка 1С от: ' : 'Письмо от: ') + generatedAt + ' (' + cfg.timezone + ')');
   cfg.files.forEach(function(d){
     const p = parsed[d.key];
@@ -161,6 +199,7 @@ async function main(){
     const payload = {
       data: f(all.data), meta: all.meta, sales: f(all.sales), accessories: f(all.accessories),
       esdn: f(all.esdn), dark: f(all.dark),
+      launch: launch ? { meta: launch.meta, data: f(launch.data) } : null,
       plans: {
         'Табак': Number((plans['Табак'] || {})[mg.name]) || 0,
         'Аксессуары': Number((plans['Аксессуары'] || {})[mg.name]) || 0,
@@ -177,7 +216,7 @@ async function main(){
   });
   if(cfg.allPage && cfg.allPage.enabled){
     pages.push({ slug: cfg.allPage.slug, title: 'Незакупленные позиции — ' + cfg.allPage.title,
-      payload: Object.assign({}, all, { plans: { 'Табак': plans['Табак'] || {}, 'Аксессуары': plans['Аксессуары'] || {}, 'ЭСДН': plans['ЭСДН'] || {} } }),
+      payload: Object.assign({}, all, { launch: launch ? { meta: launch.meta, data: launch.data } : null, plans: { 'Табак': plans['Табак'] || {}, 'Аксессуары': plans['Аксессуары'] || {}, 'ЭСДН': plans['ЭСДН'] || {} } }),
       info: 'Общая страница: все менеджеры' });
   }
   if(!pages.length) fail('Ни одной страницы не получилось собрать.');
