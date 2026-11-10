@@ -1,0 +1,23 @@
+name: Диагностика (временно)
+on:
+  push:
+    branches: [diag-greenbeam]
+permissions:
+  contents: read
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - name: Выгрузка
+        run: |
+          mkdir -p .export
+          gh release download data-export --pattern export.zip --dir .export
+          7z x -y -p"$EXPORT_PASSWORD" -o.export .export/export.zip > /dev/null
+          node tools/diag.js .export/export.json
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPORT_PASSWORD: ${{ secrets.EXPORT_PASSWORD }}
