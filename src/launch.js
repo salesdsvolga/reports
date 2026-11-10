@@ -69,7 +69,9 @@ function calc(rows, S, info){
     if(!p){ p = { t: r.t, m: r.m, ch: r.ch, closed: r.closed, akb: false, q: {}, last: null }; points.set(r.pid, p); }
     return p;
   };
+  const noChannel = new Set(); // активные точки без канала (тип клиента не HoReCa/Розница) — в отчёт не попадают
   rows.forEach(r => {
+    if(r.m && !r.ch && r.dt >= akbFrom && r.dt <= akbTo && r.qty > 0 && !r.closed) noChannel.add(r.pid);
     if(!r.m || !r.ch) return;
     if(r.dt >= akbFrom && r.dt <= akbTo && r.qty > 0 && !r.closed) point(r).akb = true;
     if(r.dt >= start && r.dt <= info.today && isNew(r.item)){
@@ -94,7 +96,7 @@ function calc(rows, S, info){
   const akbLabel = MONTHS_GEN[mFrom] + ' – ' + MONTHS_GEN[mTo] + ' ' + akbTo.slice(0, 4);
   const meta = {
     title: S.title, items, packs: S.packs, start, akbFrom, akbTo, akbLabel, today: info.today,
-    reportName: info.reportName || '', source: info.source,
+    reportName: info.reportName || '', source: info.source, noChannel: noChannel.size,
     period: ruDate(start) + ' - ' + ruDate(info.today) + ' (АКБ: ' + ruDate(akbFrom) + ' - ' + ruDate(akbTo) + ')'
   };
   return { meta, data: out, warnings: info.warnings || [] };

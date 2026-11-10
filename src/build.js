@@ -112,6 +112,7 @@ function buildLaunch(cfg, got){
   const extra = res.data.filter(function(e){ return !e.akb; }).length;
   console.log((GA ? '::notice title=' + title + '::' : '  ℹ ') + 'первая продажа ' + m.start.split('-').reverse().join('.') + ', АКБ — ' + m.akbLabel +
     '; выполнено: Хорека ' + by('Хорека') + ', Розница ' + by('Розница') + (extra ? '; сверх АКБ ' + extra : '') +
+    (m.noChannel ? '; не учтены ' + m.noChannel + ' активных точек без типа клиента HoReCa/Розница' : '') +
     '; товары: ' + m.items.length + (m.reportName ? '; отчёт «' + m.reportName.trim() + '»' : ''));
   return res;
 }
