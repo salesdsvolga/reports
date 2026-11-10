@@ -57,7 +57,7 @@ function settingsOf(r){
   const fullOwn = r.own.find(o => o.kind === 'Settings');
   const base = fullOwn ? fullOwn.xml : r.base[0].xml;
   const user = r.own.filter(o => o.kind === 'UserSettings').map(o => o.xml);
-  return Object.assign(dcs.readSettings(base, user), { reportName: r.name });
+  return Object.assign(dcs.readSettings(base, user), { reportName: r.name, fullFromMailing: !!fullOwn });
 }
 
 const nameHas = (r, match) => r.names.some(n => match.every(w => norm(n).indexOf(norm(w)) >= 0));
@@ -266,6 +266,13 @@ function build(exp, cfg){
       r.planDebug = s.userFields.map(u => '«' + u.title + '» → ' + (Array.from(new Set((u.expr.match(/Партнер\.\[[^\]]+\]/g) || []))).join(', ') || '—')).join('; ')
         + ' | группировки: ' + s.groupFields.filter(g => /^Партнер\.\[/.test(g)).join(', ');
       try{ r.planProp = pn ? ctx.propIds(pn) : []; } catch(e){ r.planProp = []; }
+      // для диагностики: отборы по номенклатуре (какие группы видит сайт и откуда взято значение)
+      const nm = id => { const it = ctx.items.get(String(id)); return it ? it.name.trim() : String(id); };
+      const src = f => s.fullFromMailing ? 'полные настройки рассылки' : f.fromMailing ? 'настройки рассылки' : 'вариант отчёта';
+      const passed = Array.from(ctx.items.values()).filter(it => !it.isGroup && !it.deleted && flt.item(it.id)).length;
+      r.itemDebug = s.filters.filter(f => /^Номенклатура/.test(f.field.trim()))
+        .map(f => f.field.trim() + ' ' + f.cmp + ' [' + src(f) + ']: ' + (f.values.map(v => nm(v.v)).join('; ') || '—')).join(' | ')
+        + ' | товаров проходит отбор: ' + passed;
     } else {
       const step = s.params['ШагПериодовСравнения'];
       if(step && norm(step.v) !== 'месяц') throw new Error('в отчёте «' + name + '» шаг периодов «' + step.v + '», сайт умеет только «Месяц»');

@@ -94,7 +94,8 @@ function readFilter(filterEl, out){
         field: text(kid(it, 'left')).trim(),
         cmp: text(kid(it, 'comparisonType')).trim(),
         values: kids(it, 'right').map(value),
-        presentation: text(kid(it, 'presentation')).trim() || null
+        presentation: text(kid(it, 'presentation')).trim() || null,
+        uid: text(kid(it, 'userSettingID')).trim() || null
       });
     } else if(t === 'FilterItemGroup'){
       const gt = text(kid(it, 'groupType')).trim();
@@ -146,8 +147,12 @@ function readGroupFields(root){
 
 function readSettings(settingsXml, userXmls){
   const { root, applied } = merge(settingsXml, userXmls);
+  const fromUser = new Set(applied);
+  const filters = readFilter(kid(root, 'filter'), []);
+  // отбор, значение которого пришло из пользовательских настроек рассылки (а не из варианта отчёта)
+  filters.forEach(f => { f.fromMailing = !!(f.uid && fromUser.has(f.uid)); });
   return {
-    filters: readFilter(kid(root, 'filter'), []),
+    filters,
     params: readParams(kid(root, 'dataParameters')),
     userFields: readUserFields(kid(root, 'userFields')),
     groupFields: readGroupFields(root),
