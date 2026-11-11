@@ -518,6 +518,38 @@
   .gb-rule{ font-size:11.5px; color:var(--ink-dim); line-height:1.45; margin:0 2px 12px; }
   .gb-rule b{ color:var(--ink); font-weight:600; }
 
+  /* Вкладка «Клиенты»: список клиентов и карточка со сводкой по всем отчётам */
+  .cl-list{ display:flex; flex-direction:column; gap:7px; max-height:560px; overflow-y:auto; }
+  .cl-item{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    background: var(--panel-2); border:1px solid var(--line); border-radius:10px;
+    padding: 10px 12px; cursor:pointer; text-align:left; width:100%;
+    font-family:'Circe','Manrope',Arial,sans-serif; color: var(--ink);
+  }
+  .cl-item:active{ opacity:.85; }
+  .cl-item .cl-main{ flex:1 1 auto; min-width:0; display:flex; flex-direction:column; gap:3px; }
+  .cl-item .name{ font-size:13.5px; font-weight:600; line-height:1.3; }
+  .cl-item .cl-sub{ font-size:11.5px; color:var(--ink-dim); line-height:1.4; }
+  .cl-item .cl-sub .bad{ color: var(--miss); }
+  .cl-item .cl-sub .good{ color: var(--hit); }
+  .cl-item .chev{ flex:none; transform: rotate(-90deg); }
+  .cl-body{ display:flex; flex-direction:column; gap:9px; }
+  .cl-sec-head{ display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-bottom:10px; }
+  .cl-sec-head h3{
+    font-family:'Uni Sans','Montserrat',Arial,sans-serif; font-size:13px; font-weight:700; margin:0;
+  }
+  .cl-sec-head .n{ font-size:11px; color:var(--ink-faint); text-align:right; }
+  .cl-sec .nosales-table.months{ grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); } /* 4 месяца в строку на телефоне */
+  .cl-sec .score-row{ margin-bottom:10px; }
+  .cl-sec .score{ padding:9px 11px; }
+  .cl-sec .score .num{ font-size:20px; }
+  .cl-sec details.hitwrap + details.hitwrap{ margin-top:4px; }
+  .cl-sec details.hitwrap summary{ margin-bottom:0; padding:7px 2px; }
+  .cl-sec details.hitwrap[open] summary{ margin-bottom:8px; }
+  .cl-sec details.hitwrap summary h3{ font-family:'Uni Sans','Montserrat',Arial,sans-serif; font-size:12.5px; font-weight:700; }
+  .cl-sec.gb-card .gb-sub{ margin-top:0; }
+  .cl-note{ font-size:11.5px; color:var(--ink-faint); line-height:1.45; margin:4px 2px 0; }
+
   /* План по табаку: под логотипом на всех вкладках */
   .tob{ margin: -6px 2px 18px; }
   .tob[hidden]{ display:none; }
@@ -983,6 +1015,7 @@
     <button class="view-tab" data-view="esdn" type="button">ЭСДН</button>
     <button class="view-tab" data-view="dark" type="button">Тёмные силы</button>
     <button class="view-tab" data-view="launch" type="button" id="launchTab" style="display:none;">Новинка</button>
+    <button class="view-tab" data-view="clients" type="button">Клиенты</button>
   </div>
 
   <div id="viewPositions">
@@ -1193,6 +1226,42 @@
     </section>
   </div>
 
+  <div id="viewClients" style="display:none;">
+    <section class="panel" id="panelClManager">
+      <h2>Менеджер<small id="clMgrHint">Кто ведёт точку</small></h2>
+      <div class="mgr-grid" id="clMgrGrid"></div>
+    </section>
+
+    <section class="panel" id="panelClList" style="display:none;">
+      <div class="tt-card">
+        <div>
+          <div class="tt-name" id="clManagerName"></div>
+          <div class="tt-meta" id="clMeta"></div>
+        </div>
+        <button class="reset-btn" id="clBackBtn">Сменить менеджера</button>
+      </div>
+      <div class="status-filter" id="clFilter" role="group" aria-label="Фильтр по клиентам"></div>
+      <div class="field" style="margin-bottom:12px;">
+        <input type="text" id="clSearch" placeholder="Поиск по клиентам…" autocomplete="off">
+        <button class="clear-x" id="clClear" style="display:none;" aria-label="Очистить">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="cl-list" id="clList"></div>
+    </section>
+
+    <section class="panel" id="panelClCard" style="display:none;">
+      <div class="tt-card">
+        <div>
+          <div class="tt-name" id="clName"></div>
+          <div class="tt-meta" id="clChips"></div>
+        </div>
+        <button class="reset-btn" id="clCloseBtn">К списку</button>
+      </div>
+      <div class="cl-body" id="clBody"></div>
+    </section>
+  </div>
+
   <footer>Данные загружаются из отчёта — период и охват зависят от файла</footer>
 </div>
 
@@ -1255,6 +1324,7 @@
     document.getElementById('viewEsdn').style.display = view === 'esdn' ? 'block' : 'none';
     document.getElementById('viewDark').style.display = view === 'dark' ? 'block' : 'none';
     document.getElementById('viewLaunch').style.display = view === 'launch' ? 'block' : 'none';
+    document.getElementById('viewClients').style.display = view === 'clients' ? 'block' : 'none';
   }
   Array.prototype.forEach.call(document.querySelectorAll('.view-tab'), function(btn){
     btn.addEventListener('click', function(){ setView(btn.dataset.view); });
@@ -1511,6 +1581,7 @@
     v.managers = Object.keys(v.byManager).sort(function(a,b){ return a.localeCompare(b,'ru'); });
     buildKpiManagerGrid(viewKey);
     resetKpiView(viewKey);
+    rebuildClients();
   }
 
   function buildKpiManagerGrid(viewKey){
@@ -1669,6 +1740,7 @@
     darkManagers = Object.keys(darkByManager).sort(function(a,b){ return a.localeCompare(b,'ru'); });
     resetDarkView();
     buildDarkManagerGrid();
+    rebuildClients();
   }
 
   function buildDarkManagerGrid(){
@@ -1844,25 +1916,29 @@
       return;
     }
     list.forEach(function(e){
-      var p = darkPct(e);
       var card = document.createElement('div');
       card.className = 'nosales-card dark-card';
-      var planTxt = e.plan > 0 ? formatMoney(e.plan) : '—';
-      var factTxt = e.fact ? formatMoney(e.fact) : '—';
-      var pctTxt = p === null ? '—' : p + '%';
-      var bar = '';
-      if(p !== null){
-        bar = '<div class="dark-bar"><i class="' + (p >= 100 ? 'full' : '') + '" style="width:' + Math.max(0, Math.min(100, p)) + '%"></i></div>';
-      }
-      card.innerHTML = '<div class="nosales-name">'+esc(e.t)+'</div>'+
-        '<div class="nosales-table"><span class="m-lbl">План</span><span class="m-lbl">Факт</span><span class="m-lbl">Выполнение</span></div>'+
-        '<div class="nosales-table">'+
-          '<span class="m-val'+(e.plan > 0 ? '' : ' zero')+'">'+planTxt+'</span>'+
-          '<span class="m-val'+(e.fact ? '' : ' zero')+'">'+factTxt+'</span>'+
-          '<span class="m-val '+(p === null ? 'zero' : darkPctCls(p))+'">'+pctTxt+'</span>'+
-        '</div>'+bar;
+      card.innerHTML = '<div class="nosales-name">'+esc(e.t)+'</div>'+darkBodyHtml(e);
       container.appendChild(card);
     });
+  }
+
+  // план / факт / выполнение одной точки (вкладка «Тёмные силы» и карточка клиента)
+  function darkBodyHtml(e){
+    var p = darkPct(e);
+    var planTxt = e.plan > 0 ? formatMoney(e.plan) : '—';
+    var factTxt = e.fact ? formatMoney(e.fact) : '—';
+    var pctTxt = p === null ? '—' : p + '%';
+    var bar = '';
+    if(p !== null){
+      bar = '<div class="dark-bar"><i class="' + (p >= 100 ? 'full' : '') + '" style="width:' + Math.max(0, Math.min(100, p)) + '%"></i></div>';
+    }
+    return '<div class="nosales-table"><span class="m-lbl">План</span><span class="m-lbl">Факт</span><span class="m-lbl">Выполнение</span></div>'+
+      '<div class="nosales-table">'+
+        '<span class="m-val'+(e.plan > 0 ? '' : ' zero')+'">'+planTxt+'</span>'+
+        '<span class="m-val'+(e.fact ? '' : ' zero')+'">'+factTxt+'</span>'+
+        '<span class="m-val '+(p === null ? 'zero' : darkPctCls(p))+'">'+pctTxt+'</span>'+
+      '</div>'+bar;
   }
 
   // ----- поиск по точкам с подсказками -----
@@ -1971,7 +2047,7 @@
     LAUNCH = launch && launch.meta ? launch : null;
     var tab = document.getElementById('launchTab');
     gbByManager = {};
-    if(!LAUNCH){ tab.style.display = 'none'; gbManagers = []; return; }
+    if(!LAUNCH){ tab.style.display = 'none'; gbManagers = []; rebuildClients(); return; }
     tab.textContent = LAUNCH.meta.title || 'Новинка';
     tab.style.display = '';
     (LAUNCH.data || []).forEach(function(e){
@@ -1986,6 +2062,7 @@
       '. Засчитывается: ' + tag('Хорека') + ', ' + tag('Розница') + '.';
     resetLaunchView();
     buildLaunchManagerGrid();
+    rebuildClients();
   }
 
   function gbCounts(list){
@@ -2074,7 +2151,7 @@
     });
   }
 
-  function gbCard(e){
+  function gbCard(e, title){
     var ok = gbPacksFor(e.ch);
     var card = document.createElement('div');
     card.className = 'nosales-card gb-card' + (e.done ? ' done' : '');
@@ -2085,7 +2162,7 @@
     if(!e.akb) sub += ' · не из АКБ';
     if(e.last) sub += ' · последняя покупка ' + gbRuDate(e.last).slice(0,5);
     card.innerHTML =
-      '<div class="gb-head"><div class="nosales-name">' + esc(e.t) + '</div>' + (badge ? '<span class="gb-badge">' + badge + '</span>' : '') + '</div>' +
+      '<div class="gb-head"><div class="nosales-name">' + esc(title || e.t) + '</div>' + (badge ? '<span class="gb-badge">' + badge + '</span>' : '') + '</div>' +
       '<div class="gb-sub">' + esc(sub) + '</div>' +
       '<div class="nosales-table">' + GB_PACKS.map(function(k){
         return '<span class="m-lbl' + (ok.indexOf(k) < 0 ? ' off' : '') + '">' + k + ' г</span>';
@@ -2145,6 +2222,319 @@
     if(gbState.manager){ renderLaunchCards(gbState.manager); gbSearch.focus(); }
   });
   document.getElementById('gbBackBtn').addEventListener('click', function(){ resetLaunchView(); });
+
+  // ---------- Клиенты (сводка по всем отчётам) ----------
+  // Один и тот же клиент есть в нескольких отчётах под одним названием. Здесь отчёты склеиваются
+  // по паре «менеджер + название точки»: в карточке клиента — всё, что о нём есть на остальных вкладках.
+  // Данные те же, что на вкладках, отдельно при сборке ничего не считается.
+  var clByManager = {};   // менеджер -> [клиент]
+  var clManagers = [];
+  var clState = { manager: null, filter: null, query: '', client: null, listTop: 0, pageTop: 0 };
+  var clReady = false;    // до конца первой загрузки сводку не собираем (см. init)
+  var clMgrGrid = document.getElementById('clMgrGrid');
+  var clSearch = document.getElementById('clSearch');
+  var clClear = document.getElementById('clClear');
+  var CL_FILTERS = [
+    { key:'Хорека',  label:'Хорека',              test:function(c){ return c.ch === 'Хорека'; } },
+    { key:'Розница', label:'Розница',             test:function(c){ return c.ch === 'Розница'; } },
+    { key:'nosales', label:'Без продаж за месяц', test:function(c){ return !!c.tob && !c.tob.revenue; } },
+    { key:'mml',     label:'Есть что допродать',  test:function(c){ return c.miss > 0; } }
+  ];
+
+  function clKey(t){ return String(t || '').toLocaleLowerCase('ru').replace(/ё/g, 'е').replace(/\s+/g, ' ').trim(); }
+  function clChannel(s){
+    var n = String(s || '').toLowerCase();
+    if(/horeca|хорека/.test(n)) return 'Хорека';
+    if(/розниц/.test(n)) return 'Розница';
+    return '';
+  }
+  function clLastMonth(e){ return e && e.months && e.months.length ? e.months[e.months.length - 1] : null; }
+  function clFirst(arr, fn){
+    for(var i = 0; i < arr.length; i++){ var v = fn(arr[i]); if(v) return v; }
+    return '';
+  }
+  function pluralClients(n){
+    var n100 = n % 100, n10 = n % 10;
+    if(n100 >= 11 && n100 <= 14) return 'клиентов';
+    if(n10 === 1) return 'клиент';
+    if(n10 >= 2 && n10 <= 4) return 'клиента';
+    return 'клиентов';
+  }
+  function clPeriod(key){
+    var ch = META && META.channels ? META.channels[key] : null;
+    return ch && ch.period ? ch.period : '';
+  }
+
+  function rebuildClients(){
+    if(!clReady) return;
+    var idx = {};
+    function add(src, e){
+      if(!e || !e.m || !e.t) return;
+      var mm = idx[e.m] || (idx[e.m] = {});
+      var k = clKey(e.t);
+      var c = mm[k] || (mm[k] = { t: e.t, m: e.m, mml: [], sales: [], dark: [], launch: [], acc: [], esdn: [] });
+      c[src].push(e);
+    }
+    DATA.forEach(function(e){ add('mml', e); });
+    SALES_DATA.forEach(function(e){ add('sales', e); });
+    DARK_DATA.forEach(function(e){ add('dark', e); });
+    ((LAUNCH && LAUNCH.data) || []).forEach(function(e){ add('launch', e); });
+    (KPI_VIEWS.acc.data || []).forEach(function(e){ add('acc', e); });
+    (KPI_VIEWS.esdn.data || []).forEach(function(e){ add('esdn', e); });
+
+    clByManager = {};
+    Object.keys(idx).forEach(function(m){
+      clByManager[m] = Object.keys(idx[m]).map(function(k){
+        var c = idx[m][k];
+        var kpi = c.acc.concat(c.esdn);
+        c.ch = clFirst(c.mml, function(e){ return clChannel(e.c); }) ||
+               clFirst(c.sales.concat(kpi), function(e){ return clChannel(e.channel); }) ||
+               clFirst(c.launch, function(e){ return clChannel(e.ch); });
+        c.st = clFirst(c.mml, function(e){ return e.st; });
+        c.typ = clFirst(c.mml.concat(kpi), function(e){ return e.typ; });
+        c.miss = 0; c.total = 0;
+        c.mml.forEach(function(e){
+          Object.keys(e.p || {}).forEach(function(n){ c.total++; if(e.p[n] === 0) c.miss++; });
+        });
+        // табак за текущий месяц; null — клиента нет в отчёте «Продажи АКБ»
+        c.tob = null;
+        c.sales.forEach(function(e){
+          var mo = clLastMonth(e);
+          if(!mo) return;
+          if(!c.tob) c.tob = { label: mo.label, revenue: 0 };
+          c.tob.revenue += mo.revenue || 0;
+        });
+        return c;
+      }).sort(function(a, b){ return a.t.localeCompare(b.t, 'ru', {sensitivity:'base'}); });
+    });
+    clManagers = Object.keys(clByManager).sort(function(a, b){ return a.localeCompare(b, 'ru'); });
+    resetClientsView();
+    buildClientsManagerGrid();
+  }
+
+  function buildClientsManagerGrid(){
+    clMgrGrid.innerHTML = '';
+    var hintEl = document.getElementById('clMgrHint');
+    if(!clManagers.length){
+      if(hintEl) hintEl.textContent = 'Нет данных';
+      var empty = document.createElement('div');
+      empty.className = 'mgr-empty';
+      empty.textContent = 'Клиентов в отчётах пока нет.';
+      clMgrGrid.appendChild(empty);
+      return;
+    }
+    if(hintEl) hintEl.textContent = 'Кто ведёт точку';
+    clManagers.forEach(function(m){
+      var card = document.createElement('button');
+      card.type = 'button';
+      card.className = 'mgr-card';
+      var disp = shortName(m);
+      var initials = disp.split(' ').filter(Boolean).slice(0,2).map(function(w){return w[0];}).join('').toUpperCase();
+      var cnt = clByManager[m].length;
+      card.innerHTML = '<span class="av">'+initials+'</span><span class="info"><span class="name">'+esc(disp)+'</span><span class="count">'+cnt+' '+pluralClients(cnt)+'</span></span>';
+      card.addEventListener('click', function(){ selectClientsManager(m, card); });
+      clMgrGrid.appendChild(card);
+    });
+    if(clManagers.length === 1) selectClientsManager(clManagers[0], clMgrGrid.children[0], true);
+  }
+
+  function resetClientsView(){
+    clState.manager = null; clState.filter = null; clState.query = ''; clState.client = null;
+    clSearch.value = ''; clClear.style.display = 'none';
+    Array.prototype.forEach.call(clMgrGrid.children, function(c){ c.classList.remove('selected'); });
+    document.getElementById('panelClList').style.display = 'none';
+    document.getElementById('panelClCard').style.display = 'none';
+  }
+
+  function selectClientsManager(m, cardEl, silent){
+    clState.manager = m; clState.filter = null; clState.query = ''; clState.client = null;
+    clSearch.value = ''; clClear.style.display = 'none';
+    Array.prototype.forEach.call(clMgrGrid.children, function(c){ c.classList.remove('selected'); });
+    if(cardEl) cardEl.classList.add('selected');
+    document.getElementById('clManagerName').textContent = shortName(m);
+    document.getElementById('panelClCard').style.display = 'none';
+    document.getElementById('panelClList').style.display = 'block';
+    renderClientsFilter();
+    renderClientsList();
+    if(!silent) document.getElementById('panelClList').scrollIntoView({behavior:'smooth', block:'start'});
+  }
+
+  function renderClientsFilter(){
+    var el = document.getElementById('clFilter');
+    var list = clByManager[clState.manager] || [];
+    el.innerHTML = '';
+    CL_FILTERS.forEach(function(f){
+      var n = list.filter(f.test).length;
+      if(!n) return;
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'status-chip' + (clState.filter === f.key ? ' active' : '');
+      b.textContent = f.label + ' (' + n + ')';
+      b.addEventListener('click', function(){
+        clState.filter = clState.filter === f.key ? null : f.key; // повторный клик снимает фильтр
+        renderClientsFilter(); renderClientsList();
+      });
+      el.appendChild(b);
+    });
+    el.style.display = el.children.length ? 'flex' : 'none';
+  }
+
+  // короткая строка под названием клиента в списке
+  function clSubHtml(c){
+    var bits = [];
+    if(c.ch) bits.push(esc(c.ch));
+    if(c.st) bits.push(esc(c.st));
+    if(c.tob) bits.push(c.tob.revenue ? 'табак ' + formatMoney(c.tob.revenue) + ' ₽' : '<span class="bad">табак: нет продаж</span>');
+    if(c.total) bits.push(c.miss ? 'ММЛ: не куплено ' + c.miss + ' из ' + c.total : '<span class="good">ММЛ закуплен</span>');
+    if(!bits.length){
+      if(c.dark.length) bits.push('Тёмные силы');
+      if(c.launch.length && LAUNCH) bits.push(esc(LAUNCH.meta.title || 'Новинка'));
+      if(c.acc.length) bits.push('аксессуары');
+      if(c.esdn.length) bits.push('ЭСДН');
+    }
+    return bits.join(' · ');
+  }
+
+  function renderClientsList(){
+    var all = clByManager[clState.manager] || [];
+    var f = CL_FILTERS.filter(function(x){ return x.key === clState.filter; })[0];
+    var q = clKey(clState.query);
+    var list = all.filter(function(c){ return (!f || f.test(c)) && (!q || clKey(c.t).indexOf(q) !== -1); });
+    var month = clFirst(all, function(c){ return c.tob ? monthShort(c.tob.label).toLowerCase() : ''; });
+    document.getElementById('clMeta').textContent = list.length === all.length
+      ? all.length + ' ' + pluralClients(all.length) + (month ? ' · табак — за ' + month : '')
+      : 'показано ' + list.length + ' из ' + all.length;
+    clSearch.placeholder = 'Название клиента среди ' + all.length + '…';
+    var container = document.getElementById('clList');
+    container.innerHTML = '';
+    if(!list.length){
+      var empty = document.createElement('div');
+      empty.className = 'mgr-empty';
+      empty.textContent = q || f ? 'Ничего не найдено.' : 'Нет клиентов по этому менеджеру.';
+      container.appendChild(empty);
+      return;
+    }
+    list.forEach(function(c){
+      var item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'cl-item';
+      item.innerHTML = '<span class="cl-main"><span class="name">' + esc(c.t) + '</span><span class="cl-sub">' + clSubHtml(c) + '</span></span>' +
+        '<svg class="chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
+      item.addEventListener('click', function(){ openClient(c); });
+      container.appendChild(item);
+    });
+  }
+
+  function clSection(title, note, cls){
+    var d = document.createElement('div');
+    d.className = 'nosales-card cl-sec' + (cls ? ' ' + cls : '');
+    d.innerHTML = '<div class="cl-sec-head"><h3>' + esc(title) + '</h3>' + (note ? '<span class="n">' + esc(note) + '</span>' : '') + '</div>';
+    return d;
+  }
+
+  function clMonthsSection(title, e){
+    var mo = clLastMonth(e);
+    var sec = clSection(title, mo && !mo.revenue ? monthShort(mo.label).toLowerCase() + ' — продаж нет' : 'продажи по месяцам, ₽');
+    sec.insertAdjacentHTML('beforeend', monthsGridHtml(e.months || []));
+    return sec;
+  }
+
+  function clMmlSection(e){
+    var names = Object.keys(e.p || {});
+    var missing = names.filter(function(n){ return e.p[n] === 0; });
+    var have = names.filter(function(n){ return e.p[n] !== 0; });
+    var sec = clSection('ММЛ' + (e.c ? ' · ' + e.c : ''), clPeriod(e.c));
+    var chev = '<svg class="chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
+    sec.insertAdjacentHTML('beforeend',
+      '<div class="score-row">' +
+        '<div class="score miss"><div class="num">' + missing.length + '</div><div class="lbl">не куплено</div></div>' +
+        '<div class="score hit"><div class="num">' + have.length + '</div><div class="lbl">уже в наличии</div></div>' +
+      '</div>');
+    [[missing, 'Не куплено', true], [have, 'Уже закуплено', false]].forEach(function(g){
+      if(!g[0].length) return;
+      var det = document.createElement('details');
+      det.className = 'hitwrap';
+      det.innerHTML = '<summary><h3>' + g[1] + ' · ' + g[0].length + '</h3>' + chev + '</summary>';
+      var ul = document.createElement('ul');
+      ul.className = 'plist';
+      renderGroupedList(ul, g[0], e, g[2]);
+      det.appendChild(ul);
+      sec.appendChild(det);
+    });
+    return sec;
+  }
+
+  function openClient(c){
+    clState.client = c;
+    clState.listTop = document.getElementById('clList').scrollTop;
+    clState.pageTop = window.pageYOffset || 0;
+    document.getElementById('clName').textContent = c.t;
+    var chips = [c.ch, c.typ && c.typ !== c.ch ? c.typ : '', c.st].filter(Boolean);
+    document.getElementById('clChips').innerHTML = chips.map(function(x){ return '<span class="chip">' + esc(x) + '</span>'; }).join('');
+
+    var body = document.getElementById('clBody');
+    body.innerHTML = '';
+    var absent = [];
+    var launchTitle = LAUNCH ? (LAUNCH.meta.title || 'Новинка') : '';
+
+    c.sales.forEach(function(e){ body.appendChild(clMonthsSection('Табак', e)); });
+    if(!c.sales.length) absent.push('Табак');
+
+    c.mml.forEach(function(e){ body.appendChild(clMmlSection(e)); });
+    if(!c.mml.length) absent.push('ММЛ');
+
+    c.dark.forEach(function(e){
+      var sec = clSection('Тёмные силы', clPeriod('Тёмные силы'), 'dark-card');
+      sec.insertAdjacentHTML('beforeend', darkBodyHtml(e));
+      body.appendChild(sec);
+    });
+    if(!c.dark.length) absent.push('Тёмные силы');
+
+    c.launch.forEach(function(e){
+      var card = gbCard(e, launchTitle);
+      card.classList.add('cl-sec');
+      body.appendChild(card);
+    });
+    if(LAUNCH && !c.launch.length) absent.push(launchTitle);
+
+    c.acc.forEach(function(e){ body.appendChild(clMonthsSection('Аксессуары', e)); });
+    if(!c.acc.length) absent.push('Аксессуары');
+
+    c.esdn.forEach(function(e){ body.appendChild(clMonthsSection('ЭСДН', e)); });
+    if(!c.esdn.length) absent.push('ЭСДН');
+
+    if(absent.length){
+      var note = document.createElement('div');
+      note.className = 'cl-note';
+      note.textContent = 'Нет в отчётах: ' + absent.join(', ') + ' — за период отчёта продаж не было или клиент не подходит под его отбор.';
+      body.appendChild(note);
+    }
+
+    document.getElementById('panelClList').style.display = 'none';
+    document.getElementById('panelClCard').style.display = 'block';
+    document.getElementById('panelClCard').scrollIntoView({behavior:'smooth', block:'start'});
+  }
+
+  function closeClient(){
+    clState.client = null;
+    document.getElementById('panelClCard').style.display = 'none';
+    document.getElementById('panelClList').style.display = 'block';
+    // вернуть список и страницу туда, где были до открытия карточки
+    document.getElementById('clList').scrollTop = clState.listTop;
+    window.scrollTo(0, clState.pageTop);
+  }
+
+  clSearch.addEventListener('input', function(){
+    clState.query = clSearch.value;
+    clClear.style.display = clState.query ? 'flex' : 'none';
+    if(clState.manager) renderClientsList();
+  });
+  clClear.addEventListener('click', function(){
+    clSearch.value = ''; clState.query = ''; clClear.style.display = 'none';
+    if(clState.manager){ renderClientsList(); clSearch.focus(); }
+  });
+  document.getElementById('clBackBtn').addEventListener('click', function(){ resetClientsView(); });
+  document.getElementById('clCloseBtn').addEventListener('click', function(){ closeClient(); });
 
   function setActiveTab(tab){
     activeTab = tab;
@@ -2260,6 +2650,7 @@
     buildManagerGrid();
     resetToStep1();
     renderPeriodBadge();
+    rebuildClients();
   }
 
   function rebuildSalesData(newSalesData){
@@ -2272,6 +2663,7 @@
     salesManagers = Object.keys(salesByManager).sort(function(a,b){ return a.localeCompare(b,'ru'); });
     buildSalesManagerGrid();
     resetSalesStep();
+    rebuildClients();
   }
 
   function setMeta(newMeta){
@@ -2612,6 +3004,8 @@
   rebuildKpiData('esdn', ESDN_DATA);
   rebuildDarkData(DARK_DATA);
   rebuildLaunchData(LAUNCH);
+  clReady = true;
+  rebuildClients(); // сводка по клиентам — после того, как загружены все отчёты
   renderPeriodBadge();
   renderTobaccoBar();
 
@@ -2703,6 +3097,10 @@
 
     // Новинка (выбор менеджера уже сделан в buildLaunchManagerGrid)
     if(gbManagers.length === 1){ hide('panelLaunchManager'); hide('gbBackBtn'); }
+
+    // Клиенты (выбор менеджера уже сделан в buildClientsManagerGrid)
+    if(clManagers.length === 1){ hide('panelClManager'); hide('clBackBtn'); }
+    else if(!clManagers.length){ emptyNote('clMgrGrid'); }
   })();
 
   window.__app = {
@@ -2711,6 +3109,7 @@
     rebuildKpiData: rebuildKpiData,
     rebuildDarkData: rebuildDarkData,
     rebuildLaunchData: rebuildLaunchData,
+    rebuildClients: rebuildClients,
     setMeta: setMeta,
     setPlans: setPlans,
     getData: function(){ return DATA; },
