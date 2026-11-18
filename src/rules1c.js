@@ -242,6 +242,7 @@ function build(exp, cfg){
       if(!uf) throw new Error('в отчёте «' + name + '» не найдено пользовательское поле «Выбор … Когда Номенклатура.Наименование = …» в группировках — не из чего взять позиции ММЛ');
       if(uf.c.unparsed.length) throw new Error('в отчёте «' + name + '», поле «' + uf.u.title + '»: не понял условие «' + uf.c.unparsed[0] + '». Поддерживается «Номенклатура.Наименование = "…"» (через «Или») и «Номенклатура.Наименование В (…)»');
       r.choice = uf.c.map;
+      r.choiceField = uf.c.field || 'name';
       r.choiceTitle = uf.u.title;
       const st = findProp(s, /^Партнер\.\[(Статус клиента[^\]]*)\]/);
       r.statusProp = st ? ctx.propIds(st) : [];

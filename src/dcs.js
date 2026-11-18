@@ -156,8 +156,13 @@ function readSettings(settingsXml, userXmls){
 }
 
 // ---------- выражения пользовательских полей ----------
-// «Выбор Когда Номенклатура.Наименование = "…" Или … Тогда "Позиция" … Иначе "" Конец»
-// → Map(наименование товара → позиция). Непонятные условия возвращаются в unparsed.
+// «Выбор Когда Номенклатура.Наименование = "…" Или Номенклатура.Артикул В ("A","B") Тогда "Позиция" … Иначе "" Конец»
+// → { map: значение поля → позиция, field: 'name' | 'sku' }. Непонятные условия возвращаются в unparsed.
+const CHOICE_FIELDS = {
+  'наименование': 'name', 'description': 'name',
+  'артикул': 'sku', 'article': 'sku'
+};
+function choiceFieldName(f){ return CHOICE_FIELDS[String(f).toLowerCase()] || null; }
 function parseChoice(expr){
   const s = String(expr || '');
   if(!/^\s*(выбор|case)(?![а-яёa-z0-9_])/i.test(s)) return null;
@@ -168,21 +173,30 @@ function parseChoice(expr){
   while((m = re.exec(s))) branches.push({ cond: m[1], result: m[2].replace(/""/g, '"') });
   const map = new Map();
   const unparsed = [];
+  const usedFields = new Set();
   branches.forEach(b => {
     let cond = b.cond.replace(/[\[\]]/g, '');
-    const nameField = '(?:Номенклатура|Nomenclature)\\.(?:Наименование|Description)';
-    const eq = new RegExp(nameField + '\\s*=\\s*' + strRe, 'gi');
-    const inl = new RegExp(nameField + '\\s+(?:В|IN)\\s*\\(([^)]*)\\)', 'gi');
+    const fld = '(?:Номенклатура|Nomenclature)\\.\\s*(Наименование|Description|Артикул|Article)';
+    const eq = new RegExp(fld + '\\s*=\\s*' + strRe, 'gi');
+    const inl = new RegExp(fld + '\\s+(?:В|IN)\\s*\\(([^)]*)\\)', 'gi');
     let k, any = false;
-    while((k = eq.exec(cond))){ const n = k[1].replace(/""/g, '"'); if(!map.has(n)) map.set(n, b.result); any = true; } // как в 1С: срабатывает первая ветка
+    while((k = eq.exec(cond))){
+      const f = choiceFieldName(k[1]); usedFields.add(f);
+      const n = k[2].replace(/""/g, '"'); if(!map.has(n)) map.set(n, b.result); any = true; // как в 1С: срабатывает первая ветка
+    }
     while((k = inl.exec(cond))){
+      const f = choiceFieldName(k[1]); usedFields.add(f);
       const ss = new RegExp(strRe, 'g'); let q;
-      while((q = ss.exec(k[1]))){ const n = q[1].replace(/""/g, '"'); if(!map.has(n)) map.set(n, b.result); any = true; }
+      while((q = ss.exec(k[2]))){ const n = q[1].replace(/""/g, '"'); if(!map.has(n)) map.set(n, b.result); any = true; }
     }
     const rest = cond.replace(eq, '').replace(inl, '').replace(/(^|[^а-яёa-z0-9_])(Или|Or)(?![а-яёa-z0-9_])/gi, '$1').trim();
     if(!any || rest) unparsed.push(b.cond.trim().slice(0, 200));
   });
-  return { map, unparsed, branches: branches.length };
+  if(usedFields.size > 1){
+    return { map: new Map(), field: 'name',
+      unparsed: ['условия поля «Выбор» используют разные поля номенклатуры (' + Array.from(usedFields).join(', ') + ') — поддерживается только одно'] };
+  }
+  return { map, unparsed, branches: branches.length, field: usedFields.has('sku') ? 'sku' : 'name' };
 }
 
 module.exports = { readSettings, parseChoice, parseXml };
