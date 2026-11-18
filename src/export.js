@@ -44,7 +44,7 @@ function compute(exp, cfg, managers){
     const unmapped = new Set();
     items.forEach(it => {
       if(it.isGroup || !r.filters.item(it.id)) return;
-      const pos = r.choice.get(it.name);
+      const pos = r.choice.get(r.choiceField === 'sku' ? String(it.sku || '') : it.name);
       if(pos) itemPos.set(it.id, pos);
       else if(!it.deleted) unmapped.add(it.name);
     });
